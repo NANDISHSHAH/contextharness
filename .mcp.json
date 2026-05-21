@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "context-harness": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--extra",
+        "harness",
+        "context-harness-mcp"
+      ],
+      "env": {
+        "CONTEXTPACK_ROOT": "${workspaceFolder}"
+      }
+    }
+  }
+}

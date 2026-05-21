@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "uv run context harness session-start"
+      }
+    ],
+    "stop": [
+      {
+        "command": "uv run context harness stop-validate",
+        "loop_limit": 2
+      }
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+site_name: ContextPack
+site_description: Universal AI Context Runtime — architecture & product documentation
+repo_url: https://github.com/your-org/contextpack
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+nav:
+  - Home: index.md
+
+  - Product:
+    - Vision & benefits: product/vision-and-benefits.md
+    - Problem statement: product/problem-statement.md
+    - Context Harness vision: product/context-harness-vision.md
+    - vs alternatives: product/comparison.md
+    - Use cases: product/use-cases.md
+
+  - Architecture:
+    - System overview: architecture/overview.md
+    - Design principles: architecture/design-principles.md
+    - Context harvester: architecture/context-harvester.md
+    - Data flows: architecture/data-flow.md
+
+  - Guides:
+    - Getting started: guides/getting-started.md
+    - Package usage (SDK): guides/package-usage.md
+    - Azure AI Foundry: guides/azure-foundry.md
+    - Agent integration: guides/agent-integration.md
+    - Context Harness: guides/context-harness.md
+
+  - Reference:
+    - Modules: reference/modules.md
+    - Configuration: reference/configuration.md
+
+  - Roadmap: roadmap.md
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
