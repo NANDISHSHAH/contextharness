@@ -35,6 +35,10 @@ nav:
     - Azure AI Foundry: guides/azure-foundry.md
     - Agent integration: guides/agent-integration.md
     - Context Harness: guides/context-harness.md
+    - User journey (demo): ../demo/USER-JOURNEY.md
+    - Build performance: guides/build-performance.md
+    - Claude integration: guides/claude-integration.md
+    - GitHub integration: guides/github-integration.md
 
   - Reference:
     - Modules: reference/modules.md

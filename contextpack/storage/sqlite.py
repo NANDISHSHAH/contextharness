@@ -54,21 +54,43 @@ class SQLiteStore:
             await db.executescript(SCHEMA)
             await db.commit()
 
-    async def upsert_entity(self, entity_id: str, entity_type: str, name: str, file_path: str, data: dict) -> None:
+    async def upsert_entities_batch(
+        self,
+        rows: list[tuple[str, str, str, str, dict]],
+    ) -> None:
+        """Insert many entities in one connection (fast path for context build)."""
+        if not rows:
+            return
+        payload = [
+            (eid, etype, name, fpath, json.dumps(data))
+            for eid, etype, name, fpath, data in rows
+        ]
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
+            await db.executemany(
                 "INSERT OR REPLACE INTO entities (id, type, name, file_path, data) VALUES (?, ?, ?, ?, ?)",
-                (entity_id, entity_type, name, file_path, json.dumps(data)),
+                payload,
+            )
+            await db.commit()
+
+    async def upsert_entity(self, entity_id: str, entity_type: str, name: str, file_path: str, data: dict) -> None:
+        await self.upsert_entities_batch([(entity_id, entity_type, name, file_path, data)])
+
+    async def upsert_embeddings_batch(
+        self,
+        rows: list[tuple[str, list[float], dict]],
+    ) -> None:
+        if not rows:
+            return
+        payload = [(cid, json.dumps(vec), json.dumps(meta)) for cid, vec, meta in rows]
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.executemany(
+                "INSERT OR REPLACE INTO embeddings (chunk_id, vector, metadata) VALUES (?, ?, ?)",
+                payload,
             )
             await db.commit()
 
     async def upsert_embedding(self, chunk_id: str, vector: list[float], metadata: dict) -> None:
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "INSERT OR REPLACE INTO embeddings (chunk_id, vector, metadata) VALUES (?, ?, ?)",
-                (chunk_id, json.dumps(vector), json.dumps(metadata)),
-            )
-            await db.commit()
+        await self.upsert_embeddings_batch([(chunk_id, vector, metadata)])
 
     async def list_entities(self) -> list[dict]:
         async with aiosqlite.connect(self.db_path) as db:

@@ -85,15 +85,17 @@ class Project:
 
         db_store = SQLiteStore(self._ctx_dir / "memory.db")
         await db_store.initialize()
-        for ent in entities:
-            eid = f"{ent.file_path}::{ent.name}"
-            await db_store.upsert_entity(
-                eid,
+        entity_rows = [
+            (
+                f"{ent.file_path}::{ent.name}",
                 str(ent.type),
                 ent.name,
                 ent.file_path,
                 ent.model_dump(),
             )
+            for ent in entities
+        ]
+        await db_store.upsert_entities_batch(entity_rows)
 
         retriever = HybridRetriever(vector_store, graph, embedder)
         self._compiler = ContextCompiler(retriever, graph)

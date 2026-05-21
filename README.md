@@ -192,6 +192,16 @@ AGENTS.md
 
 If missing, guideline-based checks are skipped gracefully.
 
+## Learn with the demo
+
+Visual user journey + tiny sample app (fast `context build`):
+
+- [demo/USER-JOURNEY.md](demo/USER-JOURNEY.md) — mermaid flows for Cursor, Claude, GitHub
+- [demo/tiny-api/](demo/tiny-api/) — mini multi-service Python app
+- `./demo/scripts/demo-02-build.sh` — timed build
+
+**Why was `memory.db` slow?** One SQLite connection per entity (fixed with batch upsert). Details: [docs/guides/build-performance.md](docs/guides/build-performance.md).
+
 ## Documentation
 
 Full product & architecture docs (MkDocs):

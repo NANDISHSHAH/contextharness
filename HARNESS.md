@@ -68,5 +68,9 @@ uv run python tooling/validate/validate_harness.py
 
 ## Docs
 
+- [User journey (demo)](demo/USER-JOURNEY.md)
+- [Build performance / memory.db](docs/guides/build-performance.md)
+- [Claude integration](docs/guides/claude-integration.md)
+- [GitHub integration](docs/guides/github-integration.md)
 - [Context Harness guide](docs/guides/context-harness.md)
 - [Vision](docs/product/context-harness-vision.md)

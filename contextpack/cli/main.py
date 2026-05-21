@@ -40,11 +40,20 @@ def init(
 @app.command("build")
 def build(
     path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    timing: bool = typer.Option(False, "--timing", help="Print per-phase build timings"),
 ) -> None:
     """Scan, parse, graph, embed, and index repository."""
+    import time
+
+    t0 = time.perf_counter()
     project = Project(path)
     _run(project.init())
+    if timing:
+        console.print(f"[dim]init: {time.perf_counter() - t0:.2f}s[/dim]")
+    t1 = time.perf_counter()
     pmap = _run(project.build())
+    if timing:
+        console.print(f"[dim]build: {time.perf_counter() - t1:.2f}s (total {time.perf_counter() - t0:.2f}s)[/dim]")
     console.print("[green]✓[/green] scanned repository")
     console.print("[green]✓[/green] parsed symbols")
     console.print("[green]✓[/green] built dependency graph")

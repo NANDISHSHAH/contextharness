@@ -1,0 +1,41 @@
+name: Context Harness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --extra dev --extra harness
+
+      - name: Tests
+        run: uv run pytest tests/ -q
+
+      - name: Demo build (fast)
+        run: uv run context build demo/tiny-api --timing
+
+      - name: Demo harvest
+        run: |
+          uv run context harvest "review auth and billing" demo/tiny-api \
+            > context-pack-demo.md
+          head -30 context-pack-demo.md
+
+      - name: Harness validate
+        run: uv run context harness validate demo/tiny-api
+
+      - name: Upload demo context pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-context-pack
+          path: context-pack-demo.md
