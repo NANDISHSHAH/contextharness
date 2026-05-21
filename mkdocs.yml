@@ -1,6 +1,6 @@
 site_name: ContextPack
 site_description: Universal AI Context Runtime — architecture & product documentation
-repo_url: https://github.com/your-org/contextpack
+repo_url: https://github.com/NANDISHSHAH/contextharness
 theme:
   name: material
   palette:
