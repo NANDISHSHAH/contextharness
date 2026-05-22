@@ -40,7 +40,7 @@ def init(
 @app.command("build")
 def build(
     path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    timing: bool = typer.Option(False, "--timing", help="Print verbose per-file timings"),
+    timing: bool = typer.Option(False, "--timing", help="Print additional build diagnostics (currently language summary)"),
 ) -> None:
     """Scan, parse, graph, embed, and index repository."""
     from rich.table import Table
