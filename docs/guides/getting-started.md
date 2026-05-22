@@ -50,8 +50,10 @@ You should see `<extra_instructions>` with **Code Context** and **Product Contex
 |------|---------|--------------|
 | 1 | `context init <path>` | Creates `.contextpack/` |
 | 2 | `context build <path>` | Scan, parse, graph, embed, index |
+| 2b | `context build <path> --vibe` | Same, with animated Pac-Man display + token/cost footer |
 | 3 | `context harvest "<query>" <path>` | Full agent context pack |
 | 4 | `context ask "<question>" <path>` | Offline synthesized answer |
+| 4b | `context ask "..." <path> --vibe` | Same, with thinking spinner + token trace panel |
 | 5 | `context ask "..." <path> --llm` | Azure/OpenAI answer (needs `.env`) |
 | 6 | `context graph <path>` | Graph neighbourhood excerpt |
 
@@ -96,6 +98,8 @@ See [Azure AI Foundry integration](azure-foundry.md).
 | `Project not built` | Run `context build` first |
 | Empty code section | Check languages supported (py, ts, js) |
 | Jira always skipped | Set `JIRA_*` and include `PROJ-123` in branch name |
+| Too many files indexed | Add custom dirs to `.contextpackignore`; `.gitignore` is read automatically |
+| Want to see phase timings | Run `context build --vibe` for live animated breakdown |
 
 ---
 
