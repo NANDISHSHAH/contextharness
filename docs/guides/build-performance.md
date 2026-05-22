@@ -33,6 +33,32 @@ After every build, a summary table is printed automatically — no flags needed:
 
 Use `--timing` for additional verbose output (e.g. language breakdown).
 
+Add `--vibe` for an animated Pac-Man display with live phase progress and a token/cost summary:
+
+```bash
+context build ./my-repo --vibe
+```
+
+```
+╭──────────────── ContextPack  ᗧ·····◉  nom nom nom ─────────────────╮
+│  ●  SCAN    0.30s    1,234 files  778 skipped                       │
+│  ●  PARSE   1.20s    789 entities from 456 files                    │
+│  ●  GRAPH   0.10s    912 nodes  12 hubs                             │
+│  ●  CHUNK   0.20s    2,100 chunks  ~84K tokens                      │
+│  ●  EMBED   0.80s    2,100 embedded  340 store-only                 │
+│  ●  STORE   0.40s    789 entities → memory.db                       │
+╰─────────────────────────────────────────────────────────────────────╯
+╭──────────────────── ᗧ◉  build stats ───────────────────────────────╮
+│  files scanned       1,234    778 skipped                           │
+│  entities embedded   2,100    340 store-only                        │
+│  tokens indexed       ~84K    estimated                             │
+│  embed cost          $0.00    hash                                  │
+│  total time          3.00s                                          │
+╰─────────────────────────────────────────────────────────────────────╯
+```
+
+Each phase row shows a live animation while running, then locks to a colored `●` when done.
+
 ## Smart ignore — what gets skipped
 
 The scanner applies three layers of filtering before a file is indexed:
@@ -103,6 +129,29 @@ CONTEXTPACK_EMBEDDING_PROVIDER=hash   # default, no API key required
 CONTEXTPACK_MAX_EMBED_ENTITIES=2000   # max entities to embed (default 2000)
 CONTEXTPACK_EMBED_HUBS_FIRST=true     # always embed hub nodes first (default true)
 ```
+
+## Ask vibe mode
+
+The `--vibe` flag also works on `context ask` — it shows a Pac-Man thinking spinner while the context is compiled, then prints a token trace panel after the answer:
+
+```bash
+context ask "How does billing integrate with auth?" ./my-repo --vibe
+```
+
+```
+╭──────────────────── ᗧ◉  token trace ──────────────────────────────╮
+│  question           ~12    tokens (estimated)                      │
+│  context          ~8.0K    tokens (compiled pack)                  │
+│  response          ~850    tokens (estimated)                      │
+│  total            ~8.9K                                            │
+│                                                                    │
+│  provider          hash                                            │
+│  est. cost        $0.00                                            │
+│  elapsed           0.42s                                           │
+╰────────────────────────────────────────────────────────────────────╯
+```
+
+When using `--llm` with OpenAI or Azure Foundry, the cost estimate reflects real API pricing (~$0.005/1K input, ~$0.015/1K output).
 
 ## Accessing build stats programmatically
 

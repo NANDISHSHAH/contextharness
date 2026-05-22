@@ -108,6 +108,7 @@ Together they deliver **grounded, auditable, portable context** for any AI agent
 | P4 | `context watch` for debounced partial re-parse on file change | P1 |
 | P5 | Skip generated/vendored files: `.d.ts`, `.min.js`, `*.map`, lock files, protobuf generated | P0 ✓ |
 | P6 | Build summary table — per-phase time, files scanned/skipped, token estimate, embed vs store-only counts | P0 ✓ |
+| P7 | Vibe mode (`--vibe`): animated Pac-Man build display, per-phase progress, token/cost footer | P1 ✓ |
 
 ---
 
@@ -191,6 +192,7 @@ Context Harness (hooks · MCP · skills · validate)
 | Onboarding time reduction | New engineers self-serve architecture questions in < 1 day |
 | Platform portability | Same `harvest()` output usable by Claude, OpenAI, and Azure Foundry without modification |
 | Build observability | Every build prints per-phase time + skip/embed counts with no extra flags |
+| Vibe mode discoverability | `--vibe` flag present and documented on `build` and `ask` commands |
 
 ---
 
