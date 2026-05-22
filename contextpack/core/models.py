@@ -80,6 +80,7 @@ class ProjectMap(BaseModel):
     languages: dict[str, int] = Field(default_factory=dict)
     frameworks: list[str] = Field(default_factory=list)
     entities: list[ParsedEntity] = Field(default_factory=list)
+    files_skipped: int = 0
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
