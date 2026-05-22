@@ -56,6 +56,28 @@ AZURE_AI_INFERENCE_ENDPOINT=https://YOUR-PROJECT.services.ai.azure.com
 AZURE_OPENAI_DEPLOYMENT=your-model-deployment
 ```
 
+## 3 — Incremental builds & change tracking (Phase 3)
+
+```bash
+python examples/03_incremental_watch.py
+```
+
+Shows: full build → `incremental_build()` with no changes → touch a file → incremental build with delta → query the SQLite change log → `contextpack.memory` low-level helpers.
+
+No API key needed.
+
+## 4 — Workflows & multi-agent memory (Phase 5)
+
+```bash
+python examples/04_workflows_agent_memory.py
+```
+
+Shows: `WorkflowExtractor` detecting call chains and API surfaces → `project.workflows()` → `AgentMemory` storing decisions/constraints/observations → `SharedMemory` reading across agents → `format_for_prompt()` for LLM injection.
+
+No API key needed.
+
+---
+
 ## Sample repo
 
 `examples/sample_repo/` — minimal Python auth module + `.pr-review/guidelines.md` for harvester demos.

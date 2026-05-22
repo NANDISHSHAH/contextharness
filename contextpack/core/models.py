@@ -119,6 +119,57 @@ class HarvestedContext(BaseModel):
     skip_reason: str | None = None
 
 
+class FileChange(BaseModel):
+    """One file's delta recorded during an incremental build."""
+
+    path: str
+    change_type: str  # "added" | "modified" | "deleted"
+    old_hash: str = ""
+    new_hash: str = ""
+    timestamp: float = 0.0
+    git_commit: str = ""
+    entities_added: list[str] = Field(default_factory=list)
+    entities_removed: list[str] = Field(default_factory=list)
+    entities_modified: list[str] = Field(default_factory=list)
+
+
+class ChangeSet(BaseModel):
+    """All changes since the previous build."""
+
+    build_id: str = ""
+    timestamp: float = 0.0
+    git_commit: str = ""
+    files_changed: list[FileChange] = Field(default_factory=list)
+    summary: str = ""
+
+    @property
+    def total_changes(self) -> int:
+        return len(self.files_changed)
+
+
+class WorkflowStep(BaseModel):
+    """One step inside a detected workflow."""
+
+    name: str
+    entity_id: str = ""
+    file_path: str = ""
+    order: int = 0
+    description: str = ""
+
+
+class AgentFact(BaseModel):
+    """A fact in multi-agent shared memory."""
+
+    fact_id: str = ""
+    agent_id: str = "default"
+    fact_type: str  # "decision" | "observation" | "constraint" | "task_state"
+    content: str
+    entity_ids: list[str] = Field(default_factory=list)
+    timestamp: float = 0.0
+    confidence: float = 1.0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class AggregatedAgentContext(BaseModel):
     """
     Complete agent-ready context (meetup: Context Aggregator).

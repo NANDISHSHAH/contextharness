@@ -59,14 +59,35 @@ def _rank_chunks(query: str, chunks: list[SemanticChunk]) -> list[SemanticChunk]
 
 
 def _infer_workflows(chunks: list[SemanticChunk]) -> list[Workflow]:
-    routes = [c for c in chunks if c.type == "route" or c.type == "api"]
-    if not routes:
-        return []
-    return [
-        Workflow(
-            name="detected_api_surface",
-            steps=[r.name for r in routes[:10]],
-            summary="API routes and handlers relevant to query",
-            entities=[r.file_path for r in routes],
+    """Lightweight workflow inference from compiled chunks (no graph required).
+
+    The full WorkflowExtractor runs during build and persists results to SQLite.
+    This fallback produces a quick summary for the compiled pack only.
+    """
+    routes = [c for c in chunks if c.type in ("route", "api")]
+    workflows: list[Workflow] = []
+    if routes:
+        workflows.append(
+            Workflow(
+                name="api_surface",
+                steps=[r.name for r in routes[:10]],
+                summary=f"API routes relevant to query ({len(routes)} endpoints)",
+                entities=list({r.file_path for r in routes}),
+            )
         )
+    # Detect sequential patterns: chunks whose names suggest an ordered flow
+    _FLOW_HINTS = ("parse", "validate", "process", "save", "send", "emit", "publish")
+    flow_chunks = [
+        c for c in chunks
+        if any(h in c.name.lower() for h in _FLOW_HINTS)
     ]
+    if len(flow_chunks) >= 2:
+        workflows.append(
+            Workflow(
+                name="processing_flow",
+                steps=[c.name for c in flow_chunks[:8]],
+                summary="Detected processing/pipeline steps",
+                entities=list({c.file_path for c in flow_chunks}),
+            )
+        )
+    return workflows
