@@ -12,6 +12,8 @@ All settings load from environment variables and optional `.env` via `pydantic-s
 | `CONTEXTPACK_VECTOR_STORE` | `sqlite` | `sqlite` (fast) or `chroma` (optional extra) |
 | `CONTEXTPACK_GUIDELINES_MAX_CHARS` | `12000` | Max chars for guideline files |
 | `CONTEXTPACK_LLM_PROVIDER` | _(empty)_ | `azure_foundry` or `openai` when using `--llm` |
+| `CONTEXTPACK_MAX_EMBED_ENTITIES` | `2000` | Max entities sent to the embedder per build. Hub nodes (high graph degree) always fill first; entities beyond the cap are stored in SQLite but skipped for vector search. |
+| `CONTEXTPACK_EMBED_HUBS_FIRST` | `true` | When `true`, graph hub nodes are always embedded regardless of the cap. Set to `false` to embed strictly in parse order. |
 
 ---
 
@@ -73,6 +75,7 @@ print(settings.context_dir(Path("./repo")))
 ```env
 CONTEXTPACK_EMBEDDING_PROVIDER=hash
 CONTEXTPACK_VECTOR_STORE=sqlite
+CONTEXTPACK_MAX_EMBED_ENTITIES=2000
 ```
 
 ### Azure enterprise
@@ -97,7 +100,28 @@ CONTEXTPACK_LLM_PROVIDER=openai
 
 ---
 
+## Ignore rules
+
+The scanner applies three layers in order:
+
+1. **Built-in directory list** — `node_modules`, `.venv`, `dist`, `build`, `.next`, `vendor`, `generated`, and 25+ more.
+2. **Built-in file patterns** — `*.d.ts`, `*.min.js`, `*.map`, lock files (`package-lock.json`, `yarn.lock`, etc.), protobuf generated (`*_pb2.py`, `*.pb.go`).
+3. **`.gitignore`** — read from repo root, applied via `fnmatch`.
+4. **`.contextpackignore`** — same `.gitignore` syntax, project-specific overrides. Place at repo root.
+
+Example `.contextpackignore`:
+
+```
+# skip a non-standard build output dir
+output/
+# skip auto-generated OpenAPI client
+src/generated/
+# skip all fixture JSON
+tests/fixtures/*.json
+```
+
 ## Related
 
+- [Build performance](../guides/build-performance.md)
 - [Azure Foundry guide](../guides/azure-foundry.md)
 - [Getting started](../guides/getting-started.md)

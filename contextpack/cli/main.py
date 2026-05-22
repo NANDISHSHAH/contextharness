@@ -40,31 +40,42 @@ def init(
 @app.command("build")
 def build(
     path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    timing: bool = typer.Option(False, "--timing", help="Print per-phase build timings"),
+    timing: bool = typer.Option(False, "--timing", help="Print additional build diagnostics (currently language summary)"),
 ) -> None:
     """Scan, parse, graph, embed, and index repository."""
-    import time
+    from rich.table import Table
 
-    t0 = time.perf_counter()
     project = Project(path)
     _run(project.init())
-    if timing:
-        console.print(f"[dim]init: {time.perf_counter() - t0:.2f}s[/dim]")
-    t1 = time.perf_counter()
-    pmap = _run(project.build())
-    if timing:
-        console.print(f"[dim]build: {time.perf_counter() - t1:.2f}s (total {time.perf_counter() - t0:.2f}s)[/dim]")
-    console.print("[green]✓[/green] scanned repository")
-    console.print("[green]✓[/green] parsed symbols")
-    console.print("[green]✓[/green] built dependency graph")
-    console.print("[green]✓[/green] generated embeddings")
-    console.print("[green]✓[/green] compiled context index")
-    console.print(
-        Panel(
-            f"Files: {len(pmap.files)}\nEntities: {len(pmap.entities)}\nLanguages: {pmap.languages}",
-            title="Build complete",
-        )
+    pmap, stats = _run(project.build())
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column(style="bold cyan", width=8)
+    table.add_column(style="dim", width=8)
+    table.add_column()
+
+    def _t(phase: str) -> str:
+        return f"{stats.phase_times.get(phase, 0):.2f}s"
+
+    table.add_row("scan",  _t("scan"),  f"{stats.files_scanned} files scanned  |  [yellow]{stats.files_skipped} skipped[/yellow]")
+    table.add_row("parse", _t("parse"), f"{stats.entities} entities  (from {stats.files_indexed} files)")
+    table.add_row(
+        "graph", _t("graph"),
+        f"{len(pmap.entities)} entities indexed  |  {stats.hub_entities} hub nodes",
     )
+    table.add_row("chunk", _t("chunk"), f"{stats.chunks} chunks  ~{stats.estimated_tokens:,} tokens estimated")
+    table.add_row(
+        "embed", _t("embed"),
+        f"{stats.embed_count} embedded  |  [dim]{stats.store_only_count} store-only[/dim]",
+    )
+    table.add_row("store", _t("store"), f"{stats.entities} entities → memory.db")
+    table.add_row("[bold]total[/bold]", f"[bold]{stats.total_time:.2f}s[/bold]", "")
+
+    console.print()
+    console.print(Panel(table, title="[green]Build complete[/green]", border_style="green"))
+
+    if timing:
+        console.print(f"\n[dim]Languages: {pmap.languages}[/dim]")
 
 
 @app.command("ask")

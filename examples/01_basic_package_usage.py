@@ -30,8 +30,9 @@ async def main() -> None:
     await project.init()
 
     print("2) Build index (scan → parse → graph → embed)")
-    pmap = await project.build()
-    print(f"   Files: {len(pmap.files)}, entities: {len(pmap.entities)}")
+    pmap, stats = await project.build()
+    print(f"   Files: {len(pmap.files)}, entities: {len(pmap.entities)}, skipped: {pmap.files_skipped}")
+    print(f"   Embedded: {stats.embed_count}  store-only: {stats.store_only_count}  total: {stats.total_time:.2f}s")
 
     print("3) Harvest complete agent context (code + guidelines + tests)")
     agent_ctx = await project.harvest("How does authentication work?")

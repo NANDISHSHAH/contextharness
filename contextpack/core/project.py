@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import structlog
@@ -24,6 +26,26 @@ from contextpack.scanner.scanner import RepositoryScanner
 from contextpack.storage.sqlite import SQLiteStore
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass
+class BuildStats:
+    """Per-phase timing and counts for a single `project.build()` run."""
+
+    files_scanned: int = 0
+    files_indexed: int = 0
+    files_skipped: int = 0
+    entities: int = 0
+    hub_entities: int = 0
+    chunks: int = 0
+    estimated_tokens: int = 0
+    embed_count: int = 0
+    store_only_count: int = 0
+    phase_times: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def total_time(self) -> float:
+        return sum(self.phase_times.values())
 
 
 class Project:
@@ -48,10 +70,20 @@ class Project:
             json.dumps({"root": str(self.root), "version": "0.1.0"}, indent=2)
         )
 
-    async def build(self) -> ProjectMap:
+    async def build(self) -> tuple[ProjectMap, BuildStats]:
+        stats = BuildStats()
+
+        # ── scan ────────────────────────────────────────────────────────────
+        t = time.perf_counter()
         scanner = RepositoryScanner(self.root)
         project_map = scanner.scan()
+        stats.phase_times["scan"] = time.perf_counter() - t
+        stats.files_scanned = len(project_map.files) + project_map.files_skipped
+        stats.files_indexed = len(project_map.files)
+        stats.files_skipped = project_map.files_skipped
 
+        # ── parse ────────────────────────────────────────────────────────────
+        t = time.perf_counter()
         file_triples: list[tuple[str, str, str]] = []
         for record in project_map.files:
             if not record.language:
@@ -69,20 +101,52 @@ class Project:
         for ent in entities:
             ent.summary = ent.docstring or f"{ent.type} {ent.name}"
         project_map.entities = entities
+        stats.phase_times["parse"] = time.perf_counter() - t
+        stats.entities = len(entities)
 
+        # ── graph ────────────────────────────────────────────────────────────
+        t = time.perf_counter()
         graph = ContextGraph.from_entities(entities)
         self._graph = graph
+        stats.phase_times["graph"] = time.perf_counter() - t
 
+        # ── tiered embedding selection ───────────────────────────────────────
+        # Tier 1: hub nodes (high graph degree) — always embed regardless of budget
+        # Tier 2: remaining entities up to max_embed_entities cap
+        # Tier 3 (store-only): entities beyond cap — kept in DB for symbol lookup
+        hub_names: set[str] = set()
+        if self._settings.embed_hubs_first and entities:
+            hub_names = {name for name, _, _ in graph.hub_entities(limit=50)}
+
+        tier1 = [e for e in entities if e.name in hub_names]
+        tier2 = [e for e in entities if e.name not in hub_names]
+        budget_remaining = max(0, self._settings.max_embed_entities - len(tier1))
+        to_embed = tier1 + tier2[:budget_remaining]
+        to_store_only = tier2[budget_remaining:]
+
+        stats.hub_entities = len(hub_names)
+        stats.embed_count = len(to_embed)
+        stats.store_only_count = len(to_store_only)
+
+        # ── chunk ────────────────────────────────────────────────────────────
+        t = time.perf_counter()
         chunker = ChunkingEngine()
-        chunks = chunker.chunk_entities(entities)
+        chunks = chunker.chunk_entities(to_embed)
+        stats.chunks = len(chunks)
+        stats.estimated_tokens = sum(c.token_estimate for c in chunks)
+        stats.phase_times["chunk"] = time.perf_counter() - t
 
+        # ── embed ────────────────────────────────────────────────────────────
+        t = time.perf_counter()
         embedder = get_embedding_provider()
         texts = [c.summary or c.content for c in chunks]
         embeddings = await embedder.embed_batch(texts)
-
         vector_store = get_vector_store(self._ctx_dir, self._settings.vector_store)
         vector_store.upsert_chunks(chunks, embeddings)
+        stats.phase_times["embed"] = time.perf_counter() - t
 
+        # ── store ────────────────────────────────────────────────────────────
+        t = time.perf_counter()
         db_store = SQLiteStore(self._ctx_dir / "memory.db")
         await db_store.initialize()
         entity_rows = [
@@ -93,9 +157,10 @@ class Project:
                 ent.file_path,
                 ent.model_dump(),
             )
-            for ent in entities
+            for ent in entities  # store ALL entities (including store-only tier)
         ]
         await db_store.upsert_entities_batch(entity_rows)
+        stats.phase_times["store"] = time.perf_counter() - t
 
         retriever = HybridRetriever(vector_store, graph, embedder)
         self._compiler = ContextCompiler(retriever, graph)
@@ -106,8 +171,16 @@ class Project:
         from contextpack.harness.staleness import stamp_build
 
         stamp_build(self.root)
-        logger.info("build_complete", files=len(project_map.files), entities=len(entities))
-        return project_map
+        logger.info(
+            "build_complete",
+            files=stats.files_indexed,
+            files_skipped=stats.files_skipped,
+            entities=stats.entities,
+            embed_count=stats.embed_count,
+            store_only=stats.store_only_count,
+            total_s=round(stats.total_time, 2),
+        )
+        return project_map, stats
 
     def is_built(self) -> bool:
         return (self._ctx_dir / "project_map.json").is_file()

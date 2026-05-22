@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     jira_email: str | None = Field(default=None, alias="JIRA_EMAIL")
     jira_api_token: str | None = Field(default=None, alias="JIRA_API_TOKEN")
     default_token_budget: int = 8_000
+    # Tiered embedding: cap total entities sent to the embedder.
+    # Hub nodes (high graph degree) are always included first.
+    max_embed_entities: int = Field(default=2000, alias="CONTEXTPACK_MAX_EMBED_ENTITIES")
+    embed_hubs_first: bool = Field(default=True, alias="CONTEXTPACK_EMBED_HUBS_FIRST")
 
     def context_dir(self, repo_path: Path) -> Path:
         return repo_path / ".contextpack"
