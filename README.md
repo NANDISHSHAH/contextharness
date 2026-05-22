@@ -45,6 +45,31 @@ python -c "from contextpack import Project; print('ok')"
 > - `uv sync --extra chroma` — ChromaDB vector store (default is SQLite, no extra needed)
 > - `uv sync --extra dev` — tests, linting, MkDocs
 
+### Run `context` from anywhere (Optional)
+
+To use the `context` command from any directory without `uv run`, add this alias to your shell config:
+
+**For bash** (`~/.bashrc`):
+```bash
+alias context='(cd /path/to/contextharness && uv run context)'
+```
+
+**For zsh** (`~/.zshrc`):
+```bash
+alias context='(cd /path/to/contextharness && uv run context)'
+```
+
+Then reload your shell:
+```bash
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+Now you can run `context` from any directory:
+```bash
+context init /path/to/any/repo
+context build /path/to/any/repo --vibe
+```
+
 ---
 
 ## Quick start (CLI)
