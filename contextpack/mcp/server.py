@@ -120,6 +120,106 @@ def run_server() -> None:
 
         return asyncio.run(_run())
 
+    @mcp.tool()
+    def get_recent_changes(limit: int = 20) -> str:
+        """List file changes recorded by the last incremental build (Phase 3)."""
+        p = _project()
+        if not p.is_built():
+            return "Index missing. Run `context build` first."
+
+        async def _run() -> str:
+            rows = await p.recent_changes(limit=limit)
+            if not rows:
+                return "No change log yet. Run `context watch` or `context build` to populate."
+            from contextpack.memory.store import format_changeset
+            from contextpack.core.models import ChangeSet, FileChange
+
+            # Group by build_id, show most recent build's changes
+            by_build: dict[str, list[dict]] = {}
+            for r in rows:
+                by_build.setdefault(r.get("build_id", "?"), []).append(r)
+            lines = []
+            for build_id, changes in list(by_build.items())[:3]:
+                lines.append(f"Build {build_id}:")
+                for c in changes[:10]:
+                    prefix = {"added": "+", "modified": "~", "deleted": "-"}.get(
+                        c.get("change_type", "?"), "?"
+                    )
+                    lines.append(f"  {prefix} {c.get('path', '?')}")
+            return "\n".join(lines)
+
+        return asyncio.run(_run())
+
+    @mcp.tool()
+    def list_workflows() -> str:
+        """List all workflows extracted from the codebase (Phase 5)."""
+        p = _project()
+        if not p.is_built():
+            return "Index missing. Run `context build` first."
+
+        async def _run() -> str:
+            wfs = await p.workflows()
+            if not wfs:
+                return "No workflows extracted yet. Run `context build` to populate."
+            lines = [f"Extracted workflows ({len(wfs)}):"]
+            for wf in wfs[:20]:
+                name = wf.get("name", "?")
+                summary = wf.get("summary", "")
+                steps = wf.get("steps", [])
+                lines.append(f"\n## {name}")
+                if summary:
+                    lines.append(summary)
+                if steps:
+                    lines.append("Steps: " + " → ".join(steps[:8]))
+            return "\n".join(lines)
+
+        return asyncio.run(_run())
+
+    @mcp.tool()
+    def agent_memory_store(
+        content: str,
+        agent_id: str = "default",
+        fact_type: str = "observation",
+    ) -> str:
+        """Store a fact in multi-agent shared memory (Phase 5).
+
+        fact_type: one of decision | observation | constraint | task_state
+        """
+        p = _project()
+        mem = p.agent_memory(agent_id)
+
+        async def _run() -> str:
+            fact_id = await mem.store(content, fact_type=fact_type)
+            return f"Stored fact {fact_id} for agent '{agent_id}' (type: {fact_type})"
+
+        return asyncio.run(_run())
+
+    @mcp.tool()
+    def agent_memory_recall(query: str = "", agent_id: str = "", limit: int = 10) -> str:
+        """Recall facts from multi-agent shared memory (Phase 5).
+
+        Leave agent_id empty to query across all agents.
+        """
+        p = _project()
+
+        async def _run() -> str:
+            mem = p.shared_memory()
+            if agent_id:
+                facts = await p.agent_memory(agent_id).recall(query=query, limit=limit)
+            else:
+                facts = await mem.recall_all(query=query, limit=limit)
+            if not facts:
+                return "No matching facts found."
+            lines = [f"Agent memory ({len(facts)} facts):"]
+            for f in facts:
+                aid = f.get("agent_id", "?")
+                ftype = f.get("fact_type", "?")
+                content = f.get("content", "")
+                lines.append(f"- [{aid}/{ftype}] {content}")
+            return "\n".join(lines)
+
+        return asyncio.run(_run())
+
     mcp.run()
 
 

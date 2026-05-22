@@ -41,6 +41,27 @@ CREATE TABLE IF NOT EXISTS workflows (
     name TEXT PRIMARY KEY,
     data TEXT
 );
+CREATE TABLE IF NOT EXISTS file_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    build_id TEXT,
+    path TEXT,
+    change_type TEXT,
+    old_hash TEXT,
+    new_hash TEXT,
+    timestamp REAL,
+    git_commit TEXT,
+    data TEXT
+);
+CREATE TABLE IF NOT EXISTS agent_memory (
+    fact_id TEXT PRIMARY KEY,
+    agent_id TEXT,
+    fact_type TEXT,
+    content TEXT,
+    entity_ids TEXT,
+    timestamp REAL,
+    confidence REAL,
+    metadata TEXT
+);
 """
 
 
@@ -98,3 +119,93 @@ class SQLiteStore:
             async with db.execute("SELECT * FROM entities") as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]
+
+    async def insert_file_changes(self, build_id: str, changes: list[dict]) -> None:
+        if not changes:
+            return
+        rows = [
+            (
+                build_id,
+                c["path"],
+                c["change_type"],
+                c.get("old_hash", ""),
+                c.get("new_hash", ""),
+                c.get("timestamp", 0.0),
+                c.get("git_commit", ""),
+                json.dumps(c),
+            )
+            for c in changes
+        ]
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.executemany(
+                """INSERT INTO file_changes
+                   (build_id, path, change_type, old_hash, new_hash, timestamp, git_commit, data)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                rows,
+            )
+            await db.commit()
+
+    async def get_recent_changes(self, limit: int = 50) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM file_changes ORDER BY timestamp DESC LIMIT ?", (limit,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(r) for r in rows]
+
+    async def upsert_agent_fact(self, fact: dict) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """INSERT OR REPLACE INTO agent_memory
+                   (fact_id, agent_id, fact_type, content, entity_ids, timestamp, confidence, metadata)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    fact["fact_id"],
+                    fact.get("agent_id", "default"),
+                    fact["fact_type"],
+                    fact["content"],
+                    json.dumps(fact.get("entity_ids", [])),
+                    fact.get("timestamp", 0.0),
+                    fact.get("confidence", 1.0),
+                    json.dumps(fact.get("metadata", {})),
+                ),
+            )
+            await db.commit()
+
+    async def recall_agent_facts(
+        self, query: str = "", agent_id: str = "", limit: int = 20
+    ) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            if agent_id:
+                async with db.execute(
+                    "SELECT * FROM agent_memory WHERE agent_id = ? ORDER BY timestamp DESC LIMIT ?",
+                    (agent_id, limit),
+                ) as cursor:
+                    rows = await cursor.fetchall()
+            else:
+                async with db.execute(
+                    "SELECT * FROM agent_memory ORDER BY timestamp DESC LIMIT ?", (limit,)
+                ) as cursor:
+                    rows = await cursor.fetchall()
+            results = [dict(r) for r in rows]
+            if query:
+                q = query.lower()
+                results = [r for r in results if q in r.get("content", "").lower()]
+            return results
+
+    async def upsert_workflow(self, name: str, data: dict) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "INSERT OR REPLACE INTO workflows (name, data) VALUES (?, ?)",
+                (name, json.dumps(data)),
+            )
+            await db.commit()
+
+    async def list_workflows(self) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT name, data FROM workflows") as cursor:
+                rows = await cursor.fetchall()
+                return [{"name": r["name"], **json.loads(r["data"])} for r in rows]

@@ -180,11 +180,139 @@ Stop hook (Cursor) reminds you when `AGENTS.md` drifts from graph hubs.
 
 ---
 
+## Phase 7 — Incremental builds & change log (Phase 3)
+
+Keep the index fresh during active coding without waiting for a full rebuild.
+
+```bash
+# Start the watcher — incremental rebuilds on every save
+context watch demo/tiny-api
+```
+
+Each save triggers a diff, re-parses only the changed file, and prints a panel:
+
+```
+╭── incremental build  (0.11s) ───────────────────────────────╮
+│ Changes ([a1b2c3d] 1 modified):                              │
+│   ~ services/api/app.py  [~2 entities]                       │
+│ 12 entities total | 3 re-embedded                            │
+╰──────────────────────────────────────────────────────────────╯
+```
+
+View the change log any time:
+
+```bash
+context changes demo/tiny-api
+```
+
+```mermaid
+sequenceDiagram
+    participant Dev
+    participant Watch as context watch
+    participant FS as .contextpack/
+    participant DB as memory.db
+
+    Dev->>Watch: save services/api/app.py
+    Watch->>FS: load file_hashes.json
+    Watch->>Watch: SHA-256 current files
+    Watch->>Watch: diff → 1 modified
+    Watch->>Watch: re-parse app.py only
+    Watch->>FS: update project_map.json
+    Watch->>FS: update vectors.json (changed chunks)
+    Watch->>DB: INSERT INTO file_changes
+    Watch->>FS: save file_hashes.json
+    Watch-->>Dev: print diff panel
+```
+
+**SDK:**
+
+```python
+pmap, stats, changeset = await project.incremental_build()
+print(changeset.summary)       # "[a1b2c3d] 1 modified"
+rows = await project.recent_changes(limit=10)
+```
+
+Full guide: [Incremental builds & change tracking](../docs/guides/incremental-builds.md)
+
+---
+
+## Phase 8 — Workflows & multi-agent memory (Phase 5)
+
+Every `context build` now also extracts workflows and makes multi-agent shared memory available.
+
+### Workflows
+
+```bash
+context build demo/tiny-api      # extraction runs automatically
+context workflows demo/tiny-api  # list what was found
+```
+
+Sample output:
+
+```
+api_surface::app
+  API routes in app (2 endpoints)
+  get_current_user → list_invoices_for_user
+
+call_chain::get_current_user
+  Call chain from get_current_user (2 steps)
+  get_current_user → fetch_invoices
+```
+
+**In Cursor via MCP:**
+
+```
+Use list_workflows to show the flows in this codebase
+```
+
+```mermaid
+flowchart LR
+    subgraph build ["context build"]
+        G[Entity graph] --> WX[WorkflowExtractor]
+        WX --> API[API surface]
+        WX --> CC[Call chains]
+        WX --> CL[Class lifecycles]
+        API & CC & CL --> DB[(workflows table)]
+    end
+    DB --> CLI[context workflows]
+    DB --> MCP[list_workflows MCP]
+```
+
+### Multi-agent memory
+
+Agents can share decisions and constraints across sessions — no more repeating the same analysis:
+
+```python
+# Reviewer agent stores what it found
+reviewer = project.agent_memory("reviewer")
+await reviewer.store_decision("Auth uses JWT — avoid session cookies")
+await reviewer.store_constraint("Never expose raw user IDs")
+
+# Fixer agent reads it before acting
+shared = project.shared_memory()
+block = await shared.format_for_prompt(query="auth")
+# → "## Shared agent memory\n- [reviewer/decision] Auth uses JWT..."
+```
+
+**In Cursor via MCP:**
+
+```
+Use agent_memory_store with content "Decided: use dependency injection" and fact_type "decision"
+Use agent_memory_recall with query "auth" to see what other agents found
+```
+
+Full guide: [Workflows & multi-agent memory](../docs/guides/workflows-agent-memory.md)
+
+---
+
 ## Cheat sheet
 
 | Goal | Command |
 |------|---------|
 | Fast learning | `context build demo/tiny-api --timing` |
+| Active coding | `context watch demo/tiny-api` |
+| View changes | `context changes demo/tiny-api` |
+| View workflows | `context workflows demo/tiny-api` |
 | Cursor session | hooks auto + MCP `project_outline` |
 | Claude paste | `context harvest "…" . > pack.md` |
 | PR review | `context harvest "functional review" . --branch feat/x` |
@@ -195,5 +323,7 @@ Stop hook (Cursor) reminds you when `AGENTS.md` drifts from graph hubs.
 ## Next
 
 - [tiny-api README](tiny-api/README.md)
+- [Incremental builds](../docs/guides/incremental-builds.md)
+- [Workflows & agent memory](../docs/guides/workflows-agent-memory.md)
 - [Build performance](../docs/guides/build-performance.md)
 - [Claude](../docs/guides/claude-integration.md) · [GitHub](../docs/guides/github-integration.md)

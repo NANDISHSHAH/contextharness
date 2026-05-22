@@ -1,29 +1,37 @@
 # ContextPack + Context Harness
 
-**ContextPack** is a universal AI context runtime — graph-native understanding, compression, and multi-source harvesting.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha-orange)](pyproject.toml)
 
-**Context Harness** is the workflow layer on top: Cursor/Claude hooks, MCP tools, skills, and doc/graph validation — the closed loop between *how agents work* and *what they see*.
+**ContextPack** is a universal AI context runtime — graph-native code understanding, compression, and multi-source harvesting for any repository.
 
-See [HARNESS.md](HARNESS.md) for the full combo. Inspired by [Helpline’s AI Layer](https://github.com/coleam00/helpline) + ContextPack runtime.
+**Context Harness** is the workflow layer on top: Cursor/Claude hooks, MCP tools, skills, and doc/graph validation — a closed loop between _how agents work_ and _what they see_.
 
-## Meetup-inspired: complete context for agents
+See [HARNESS.md](HARNESS.md) for the full architecture.
 
-Based on domain-aware PR review architecture, ContextPack harvests **parallel context sources** and aggregates them into one agent-ready pack:
+---
+
+## How it works
+
+ContextPack harvests **parallel context sources** and aggregates them into one agent-ready pack:
 
 | Source | Fetcher | What you get |
-|--------|---------|----------------|
+|--------|---------|--------------|
 | Code | `CodeContextFetcher` | Call graphs, symbols, cross-module deps |
-| Product guidelines | `ProductGuidelinesFetcher` | `.pr-review/guidelines.md`, `AGENTS.md`, … |
-| Product behaviour | `TestBehaviourFetcher` | Expected behaviour from test names |
+| Guidelines | `ProductGuidelinesFetcher` | `.pr-review/guidelines.md`, `AGENTS.md` |
+| Test behaviour | `TestBehaviourFetcher` | Expected behaviour names from tests |
 | Product intent | `JiraIntentFetcher` | Ticket AC & description (optional) |
 
-The **Context Aggregator** merges these into `<extra_instructions>` with clear headings — ready for Claude, OpenAI, Cursor, or LangGraph.
+The **Context Aggregator** merges these into an `<extra_instructions>` block ready for Claude, OpenAI, Cursor, or LangGraph.
 
-## Install as a package
+---
+
+## Install
 
 ```bash
-git clone <your-repo>
-cd contextharness   # or contextpack
+git clone git@github.com:NANDISHSHAH/contextharness.git
+cd contextharness
 
 uv sync
 uv pip install -e .
@@ -32,71 +40,95 @@ uv pip install -e .
 python -c "from contextpack import Project; print('ok')"
 ```
 
-Runnable examples: [`examples/README.md`](examples/README.md)
+> **Optional extras**
+> - `uv sync --extra harness` — MCP server for Cursor / Claude
+> - `uv sync --extra chroma` — ChromaDB vector store (default is SQLite, no extra needed)
+> - `uv sync --extra dev` — tests, linting, MkDocs
 
-```bash
-python examples/01_basic_package_usage.py      # no API key
-python examples/02_azure_foundry_agent.py      # Azure Foundry LLM
-```
+---
 
 ## Quick start (CLI)
 
 ```bash
-uv sync --extra harness   # MCP server for Cursor
 context init ./my-repo
-context build ./my-repo
+context build ./my-repo           # plain summary table
+context build ./my-repo --vibe    # animated Pac-Man display + token/cost footer
 context harvest "review upload pipeline" ./my-repo
-context harness orient    # session briefing (same as sessionStart hook)
-context harness validate  # AGENTS.md vs graph hubs
+context harness orient    # session briefing
+context harness validate  # check AGENTS.md vs graph hubs
 ```
-
-**Cursor:** enable `.mcp.json` → `context-harness` and use `.cursor/hooks.json` (auto orientation + stop validation).
 
 ```bash
 context ask "How does authentication work?" ./my-repo
-context ask "Explain auth" ./my-repo --llm   # uses Azure Foundry / OpenAI from .env
+context ask "Explain auth" ./my-repo --vibe   # thinking spinner + token trace
+context ask "Explain auth" ./my-repo --llm    # uses Azure Foundry / OpenAI from .env
 ```
+
+**Cursor:** enable `.mcp.json` → `context-harness` server and drop `.cursor/hooks.json` into your repo for automatic session orientation and stop validation.
+
+---
+
+## CLI reference
+
+| Command | Description |
+|---------|-------------|
+| `context init` | Create `.contextpack/` workspace |
+| `context build` | Scan → parse → graph → embed → index + extract workflows |
+| `context build --vibe` | Same, with animated Pac-Man display and token/cost summary |
+| `context harvest` | Multi-source context aggregation |
+| `context ask` | Answer a question using harvested context |
+| `context ask --vibe` | Same, with thinking spinner and token trace panel |
+| `context graph` | Show a graph excerpt |
+| `context watch` | Watch for changes and rebuild incrementally |
+| `context changes` | Show file changes from incremental builds |
+| `context workflows` | List workflows extracted from the codebase |
+
+---
 
 ## Python SDK
 
 ```python
 import asyncio
 from contextpack import Project
-from contextpack.adapters import AzureFoundryAdapter
 
 async def main():
     project = Project("./repo")
     await project.init()
     await project.build()
 
-    # Complete agent context (code + guidelines + tests + optional Jira)
+    # Full agent context: code + guidelines + tests + optional Jira
     agent_ctx = await project.harvest(
         "Explain upload pipeline",
         branch_name="feature/PROJ-123-upload",
     )
     print(agent_ctx.extra_instructions)
 
-    # Offline answer (no cloud API)
-    print(await project.ask("How authentication works?"))
-
-    # Azure AI Foundry — uses deployment endpoint, NOT api.openai.com
-    answer = await project.ask("How authentication works?", use_llm=True)
-    print(answer)
+    # Offline answer — no cloud API required
+    print(await project.ask("How does authentication work?"))
 
 asyncio.run(main())
 ```
 
-## Azure AI Foundry (not direct OpenAI API)
+Runnable examples: [`examples/README.md`](examples/README.md)
 
-Use a model **deployed in Azure AI Foundry**. Copy endpoint, key, and deployment name from **Foundry → Deployments**.
+```bash
+python examples/01_basic_package_usage.py      # no API key needed
+python examples/02_azure_foundry_agent.py      # requires Azure Foundry env vars
+```
+
+---
+
+## Azure AI Foundry
+
+Use a model deployed in **Azure AI Foundry**. Copy the endpoint, key, and deployment name from **Foundry → Deployments**.
 
 ```env
 CONTEXTPACK_LLM_PROVIDER=azure_foundry
 AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com/
-AZURE_OPENAI_API_KEY=<foundry-key>
+AZURE_OPENAI_API_KEY=<key>
 AZURE_OPENAI_DEPLOYMENT=<deployment-name>
 
-# Optional: embeddings from same Foundry resource
+# Optional: embeddings from the same Foundry resource
 CONTEXTPACK_EMBEDDING_PROVIDER=azure_foundry
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
 ```
@@ -111,25 +143,16 @@ llm = AzureFoundryLLM()
 answer = await llm.complete(system, f"{user}\n\nQuestion: How does auth work?")
 ```
 
-**Inference project URL** (some Foundry setups use `*.services.ai.azure.com` instead of `*.openai.azure.com`):
+Some Foundry setups use an inference project URL (`*.services.ai.azure.com`) instead of the OpenAI-compatible endpoint:
 
 ```env
 AZURE_USE_INFERENCE_ENDPOINT=true
 AZURE_AI_INFERENCE_ENDPOINT=https://<project>.services.ai.azure.com
 ```
 
-See [`examples/02_azure_foundry_agent.py`](examples/02_azure_foundry_agent.py) for a full script.
+See [`examples/02_azure_foundry_agent.py`](examples/02_azure_foundry_agent.py) for a complete working script.
 
-## CLI
-
-| Command | Description |
-|---------|-------------|
-| `context init` | Create `.contextpack/` workspace |
-| `context build` | Scan → parse → graph → embed → index |
-| `context harvest` | Multi-source context aggregation |
-| `context ask` | Answer using full harvested context |
-| `context graph` | Show graph excerpt |
-| `context watch` | Rebuild on file changes |
+---
 
 ## Architecture
 
@@ -140,7 +163,7 @@ Repository
 Scanner → Parsers → ContextGraph (NetworkX)
     │                      │
     ▼                      ▼
-Chunking → Embeddings → ChromaDB
+Chunking → Embeddings → SQLite (default) / ChromaDB (optional)
     │
     ▼
 HybridRetriever → ContextCompiler (token budget)
@@ -155,63 +178,64 @@ ContextAggregator → AggregatedAgentContext
 Adapters (Claude / OpenAI / Cursor / LangGraph)
 ```
 
-## Why was startup slow?
-
-Three things caused multi-minute “warm up”:
-
-1. **ChromaDB** — first `import chromadb` pulls in ONNX Runtime (~100MB+) and can take **2–5 minutes** on a cold machine. Default is now **`sqlite`** vector store (instant).
-2. **`uv sync`** — the initial install downloaded 118 packages including Chroma, MkDocs, and Mypy (~2+ min). Use `uv sync` without `--all-extras` for a lean dev install.
-3. **Eager imports** — parsers and Chroma loaded at import time; these are now **lazy**.
-
-Use Chroma only when you need it:
-
-```bash
-uv sync --extra chroma
-export CONTEXTPACK_VECTOR_STORE=chroma
-```
+---
 
 ## Configuration
 
-Copy `.env.example` to `.env`:
+Copy `.env.example` to `.env` and set the relevant keys:
 
-- `CONTEXTPACK_LLM_PROVIDER=azure_foundry` — chat via Foundry deployment
-- `AZURE_OPENAI_*` — endpoint, key, deployment from Azure AI Foundry
-- `CONTEXTPACK_EMBEDDING_PROVIDER=hash` — local, no API key (default)
-- `azure_foundry` / `openai` — cloud embeddings
-- `JIRA_*` — optional product intent from tickets
+| Variable | Purpose |
+|----------|---------|
+| `CONTEXTPACK_LLM_PROVIDER` | `azure_foundry` or `openai` |
+| `AZURE_OPENAI_*` | Endpoint, key, deployment from Azure AI Foundry |
+| `CONTEXTPACK_EMBEDDING_PROVIDER` | `hash` (local, default), `azure_foundry`, or `openai` |
+| `CONTEXTPACK_VECTOR_STORE` | `sqlite` (default) or `chroma` |
+| `JIRA_*` | Optional — product intent from Jira tickets |
 
-## Team guidelines (product context)
+---
 
-Add domain rules for agents:
+## Team guidelines
 
-```text
-.pr-review/guidelines.md   # up to 12k chars (meetup convention)
+Place domain rules for agents in any of these files; ContextPack picks them up automatically:
+
+```
+.pr-review/guidelines.md
 .contextpack/guidelines.md
 AGENTS.md
 ```
 
-If missing, guideline-based checks are skipped gracefully.
+If none are present, guideline-based checks are skipped gracefully.
 
-## Learn with the demo
+---
 
-Visual user journey + tiny sample app (fast `context build`):
+## Demo
 
-- [demo/USER-JOURNEY.md](demo/USER-JOURNEY.md) — mermaid flows for Cursor, Claude, GitHub
-- [demo/tiny-api/](demo/tiny-api/) — mini multi-service Python app
-- `./demo/scripts/demo-02-build.sh` — timed build
+Run the tiny-api sample app (builds in under a second):
 
-**Why was `memory.db` slow?** One SQLite connection per entity (fixed with batch upsert). Details: [docs/guides/build-performance.md](docs/guides/build-performance.md).
+```bash
+chmod +x demo/scripts/*.sh
+./demo/scripts/demo-01-setup.sh    # install harness on tiny-api
+./demo/scripts/demo-02-build.sh    # build index with timing
+./demo/scripts/demo-03-harvest.sh "review auth and billing"
+```
+
+- [demo/USER-JOURNEY.md](demo/USER-JOURNEY.md) — visual walkthrough with Mermaid flows
+- [demo/tiny-api/](demo/tiny-api/) — the sample app
+
+---
 
 ## Documentation
 
-Full product & architecture docs (MkDocs):
+Full product and architecture docs (MkDocs):
 
 ```bash
 uv sync --extra dev
 mkdocs serve
 ```
 
-Open http://127.0.0.1:8000 — or read directly in [`docs/`](docs/index.md).
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) or read directly in [`docs/`](docs/index.md).
+
+---
 
 ## Development
 
@@ -222,14 +246,20 @@ ruff check contextpack tests
 mypy contextpack
 ```
 
+---
+
 ## Roadmap
 
-- **Phase 1** ✓ Scanner, parser, graph, embeddings, retrieval
-- **Phase 2** ✓ Compiler, harvester, aggregator
-- **Phase 3** Watch, incremental updates, git diff memory
-- **Phase 4** ✓ Context Harness (hooks, MCP, skills, validate)
-- **Phase 5** Multi-agent memory, workflow extraction
+| Phase | Status | Scope |
+|-------|--------|-------|
+| 1 | Done | Scanner, parser, graph, embeddings, retrieval |
+| 2 | Done | Compiler, harvester, aggregator |
+| 3 | Done | Incremental watch mode, file-hash delta tracking, git-diff change log |
+| 4 | Done | Context Harness — hooks, MCP, skills, validate |
+| 5 | Done | WorkflowExtractor (call chains, API surface, class lifecycles), multi-agent shared memory |
+
+---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

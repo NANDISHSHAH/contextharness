@@ -37,6 +37,8 @@ nav:
     - Context Harness: guides/context-harness.md
     - User journey (demo): ../demo/USER-JOURNEY.md
     - Build performance: guides/build-performance.md
+    - Incremental builds (Phase 3): guides/incremental-builds.md
+    - Workflows & agent memory (Phase 5): guides/workflows-agent-memory.md
     - Claude integration: guides/claude-integration.md
     - GitHub integration: guides/github-integration.md
 
