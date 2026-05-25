@@ -594,6 +594,7 @@ dev = [
 ]
 harness = [
     { name = "mcp" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -614,6 +615,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "rich", specifier = ">=13.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
+    { name = "ruff", marker = "extra == 'harness'", specifier = ">=0.4.0" },
     { name = "structlog", specifier = ">=24.1.0" },
     { name = "tree-sitter", specifier = ">=0.22.0" },
     { name = "tree-sitter-javascript", specifier = ">=0.21.0" },

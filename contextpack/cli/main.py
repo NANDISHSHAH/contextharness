@@ -268,7 +268,7 @@ def workflows_cmd(
     project = Project(path)
     wfs = _run(project.workflows())
     if not wfs:
-        console.print("[dim]No workflows detected — codebase may be too small for pattern recognition, or run `context build` first.[/dim]")
+        console.print("[dim]No workflows yet — run `context build` first.[/dim]")
         return
 
     console.print(f"\n[bold]Extracted workflows[/bold] ({len(wfs)})\n")
@@ -282,6 +282,258 @@ def workflows_cmd(
         if steps:
             console.print("  " + " → ".join(steps[:8]))
         console.print()
+
+
+# ── Phase 6: Pre-Skill Engine ────────────────────────────────────────────────
+
+skills_app = typer.Typer(help="Skill gates — pre-edit verification engine (Phase 6)")
+app.add_typer(skills_app, name="skills")
+
+
+@skills_app.command("plan")
+def skills_plan(
+    files: str = typer.Argument(..., help="Comma-separated changed file paths"),
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    blast_radius: int = typer.Option(0, "--blast-radius", "-b", help="Known blast radius"),
+) -> None:
+    """Compute a SkillPlan for the given changed files."""
+    from contextpack.skills.manifest import SkillManifest
+    from contextpack.skills.router import SkillRouter
+
+    changed = [f.strip() for f in files.split(",") if f.strip()]
+    manifest = SkillManifest.load(path)
+    plan = SkillRouter(manifest).route(changed, blast_radius=blast_radius)
+    console.print(f"\n[bold]Skill Plan[/bold] for {len(changed)} file(s):\n")
+    console.print(plan.summary())
+
+
+@skills_app.command("run")
+def skills_run(
+    files: str = typer.Argument(..., help="Comma-separated changed file paths"),
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    blast_radius: int = typer.Option(0, "--blast-radius", "-b"),
+    agent_id: str = typer.Option("default", "--agent-id"),
+) -> None:
+    """Run the full skill verification gate (plan → enforce → execute → record)."""
+    from contextpack.skills.manifest import SkillManifest
+    from contextpack.skills.verifier import SkillVerifierLoop
+
+    changed = [f.strip() for f in files.split(",") if f.strip()]
+    manifest = SkillManifest.load(path)
+    db = path / ".contextpack" / "memory.db"
+    loop = SkillVerifierLoop(db)
+    result = _run(loop.verify(changed, path, manifest, blast_radius=blast_radius, agent_id=agent_id))
+    console.print()
+    console.print(result.to_text())
+    if not result.allowed:
+        raise typer.Exit(code=1)
+
+
+@skills_app.command("history")
+def skills_history(
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    limit: int = typer.Option(10, "--limit", "-n"),
+) -> None:
+    """Show recent evidence bundles (skill gate audit trail)."""
+    from rich.table import Table
+    from contextpack.skills.evidence import EvidenceStore
+
+    db = path / ".contextpack" / "memory.db"
+    store = EvidenceStore(db)
+    bundles = _run(store.list_recent(limit=limit))
+    if not bundles:
+        console.print("[dim]No evidence bundles yet. Run `context skills run` first.[/dim]")
+        return
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Action ID", style="dim", width=14)
+    table.add_column("Agent", width=10)
+    table.add_column("Files")
+    table.add_column("Skills", width=30)
+    table.add_column("Result", width=8)
+    for b in bundles:
+        icon = "[green]✅[/green]" if b.passed else "[red]❌[/red]"
+        skills_str = " ".join(
+            ("✅" if r.get("passed") else "❌") + r["skill"] for r in b.skill_results[:4]
+        )
+        table.add_row(
+            b.action_id,
+            b.agent_id,
+            ", ".join(b.files_modified[:2]),
+            skills_str,
+            icon,
+        )
+    console.print(table)
+
+
+# ── Phase 7: Contracts ────────────────────────────────────────────────────────
+
+contracts_app = typer.Typer(help="Semantic contracts — symbol contracts & invariants (Phase 7)")
+app.add_typer(contracts_app, name="contracts")
+
+
+@contracts_app.command("show")
+def contracts_show(
+    symbol: str = typer.Argument("", help="Symbol name to look up (empty = all)"),
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+) -> None:
+    """Show extracted contracts for a symbol."""
+    from contextpack.contracts.registry import ContractRegistry
+
+    db = path / ".contextpack" / "memory.db"
+    reg = ContractRegistry(db)
+    if symbol:
+        results = _run(reg.search(symbol, limit=20))
+    else:
+        results = _run(reg.list_all(limit=30))
+    if not results:
+        console.print("[dim]No contracts indexed. Run `context build` first.[/dim]")
+        return
+    console.print(reg.format_for_context(results))
+
+
+@contracts_app.command("check")
+def contracts_check(
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+) -> None:
+    """Check architectural invariants against the current codebase."""
+    from contextpack.contracts.invariants import InvariantConfig, InvariantGuard
+
+    config = InvariantConfig.load(path)
+    if not config.invariants:
+        console.print("[yellow]No invariants.yml found. Create .contextpack/invariants.yml[/yellow]")
+        return
+    db = path / ".contextpack" / "memory.db"
+    guard = InvariantGuard(db)
+    violations = guard.check(config, [])  # full check without specific diff
+    if not violations:
+        console.print("[green]✅ No invariant violations[/green]")
+    else:
+        console.print(f"[red]❌ {len(violations)} violation(s):[/red]")
+        for v in violations:
+            console.print(v.to_text())
+        raise typer.Exit(code=1)
+
+
+# ── Phase 8: Governance ───────────────────────────────────────────────────────
+
+@app.command("debt")
+def debt_cmd(
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    limit: int = typer.Option(30, "--limit", "-n"),
+) -> None:
+    """Show per-module context debt scores (Phase 8)."""
+    from contextpack.governance.debt import ContextDebtTracker
+
+    db = path / ".contextpack" / "memory.db"
+    tracker = ContextDebtTracker(db)
+    records = _run(tracker.list_all(limit=limit))
+    console.print(tracker.format_report(records))
+
+
+@app.command("locks")
+def locks_cmd(
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+) -> None:
+    """Show active agent locks (multi-agent conflict table) (Phase 8)."""
+    from rich.table import Table
+    from contextpack.governance.locks import AgentLockTable
+
+    db = path / ".contextpack" / "memory.db"
+    lock_table = AgentLockTable(db)
+    active = _run(lock_table.list_active())
+    if not active:
+        console.print("[dim]No active locks.[/dim]")
+        return
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Lock ID", style="dim", width=14)
+    table.add_column("Agent", width=12)
+    table.add_column("Files")
+    table.add_column("Expires", width=10)
+    import datetime
+    for lock in active:
+        exp = datetime.datetime.fromtimestamp(lock.expires_at).strftime("%H:%M:%S")
+        table.add_row(
+            lock.lock_id,
+            lock.agent_id,
+            ", ".join(lock.files[:3]),
+            exp,
+        )
+    console.print(table)
+
+
+# ── Phase 9: Adaptive Intelligence ───────────────────────────────────────────
+
+@app.command("patterns")
+def patterns_cmd(
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    limit: int = typer.Option(20, "--limit", "-n"),
+) -> None:
+    """Show recurring failure patterns (Phase 9)."""
+    from contextpack.adaptive.patterns import FailurePatternStore
+
+    db = path / ".contextpack" / "memory.db"
+    store = FailurePatternStore(db)
+    patterns = _run(store.list_all(limit=limit))
+    if not patterns:
+        console.print("[dim]No failure patterns recorded yet.[/dim]")
+        return
+    console.print(f"\n[bold]Failure Patterns[/bold] ({len(patterns)})\n")
+    for p in patterns:
+        color = "red" if p.frequency >= 5 else "yellow"
+        console.print(f"[{color}]{p.failure_class}[/{color}]  ×{p.frequency}  [{p.skill}]  {p.file_pattern}")
+        if p.remediation_hint:
+            console.print(f"  [dim]{p.remediation_hint}[/dim]")
+
+
+@app.command("coupling")
+def coupling_cmd(
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    days: int = typer.Option(30, "--days", "-d", help="Trend window in days"),
+) -> None:
+    """Show architectural coupling trend over time (Phase 9)."""
+    from contextpack.adaptive.coupling import CouplingMonitor
+
+    db = path / ".contextpack" / "memory.db"
+    monitor = CouplingMonitor(db)
+    trend = _run(monitor.trend(days=days))
+    console.print(trend.to_text())
+
+
+@app.command("snapshots")
+def snapshots_cmd(
+    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    limit: int = typer.Option(10, "--limit", "-n"),
+    diff: Optional[str] = typer.Option(None, "--diff", help="Diff two snapshot IDs: before,after"),
+) -> None:
+    """List or diff context snapshots (Phase 9)."""
+    from contextpack.adaptive.snapshots import ContextSnapshotEngine
+
+    db = path / ".contextpack" / "memory.db"
+    engine = ContextSnapshotEngine(db)
+
+    if diff:
+        parts = diff.split(",")
+        if len(parts) != 2:
+            console.print("[red]--diff requires two snapshot IDs: before_id,after_id[/red]")
+            raise typer.Exit(code=1)
+        before = _run(engine.get(parts[0].strip()))
+        after = _run(engine.get(parts[1].strip()))
+        if not before or not after:
+            console.print("[red]One or both snapshot IDs not found.[/red]")
+            raise typer.Exit(code=1)
+        result = engine.diff(before, after)
+        console.print(result.to_text())
+    else:
+        snaps = _run(engine.list_recent(limit=limit))
+        if not snaps:
+            console.print("[dim]No snapshots yet.[/dim]")
+            return
+        console.print(f"\n[bold]Context Snapshots[/bold] ({len(snaps)})\n")
+        import datetime
+        for s in snaps:
+            dt = datetime.datetime.fromtimestamp(s.timestamp).strftime("%Y-%m-%d %H:%M")
+            nodes = s.graph_state.get("nodes", "?")
+            console.print(f"[cyan]{s.snapshot_id}[/cyan]  {dt}  [{s.agent_id}]  nodes={nodes}  {s.task[:50]}")
 
 
 if __name__ == "__main__":
