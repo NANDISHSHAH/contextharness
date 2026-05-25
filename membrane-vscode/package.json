@@ -1,0 +1,372 @@
+{
+  "name": "membrane-vscode",
+  "displayName": "Membrane — Context Intelligence & Agent Governance",
+  "description": "Graph-native codebase understanding, skill gates, and agent governance for your workspace.",
+  "version": "0.1.0",
+  "publisher": "membrane",
+  "author": "Nandish Shah",
+  "icon": "media/membranelogo.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NANDISHSHAH/contextharness"
+  },
+  "bugs": {
+    "url": "https://github.com/NANDISHSHAH/contextharness/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "context",
+    "mcp",
+    "agents",
+    "codebase",
+    "intelligence",
+    "governance"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --format=cjs --target=node18",
+    "compile:graph": "esbuild webview-src/graph/graph.ts --bundle --outfile=out/webview-graph.js --platform=browser --format=iife",
+    "compile:harvest": "esbuild webview-src/harvest/harvest.ts --bundle --outfile=out/webview-harvest.js --platform=browser --format=iife",
+    "compile:wizard": "esbuild webview-src/wizard/wizard.ts --bundle --outfile=out/webview-wizard.js --platform=browser --format=iife",
+    "compile:webviews": "npm run compile:graph && npm run compile:harvest && npm run compile:wizard",
+    "watch": "npm run compile -- --watch",
+    "watch:webviews": "npm run compile:webviews -- --watch",
+    "prepackage": "npm run compile && npm run compile:webviews",
+    "package": "vsce package --no-dependencies",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "membrane",
+          "title": "Membrane",
+          "icon": "media/membrane.svg"
+        }
+      ]
+    },
+    "views": {
+      "membrane": [
+        {
+          "id": "membrane.symbolExplorer",
+          "name": "Symbol Explorer"
+        },
+        {
+          "id": "membrane.contextDebt",
+          "name": "Context Debt"
+        },
+        {
+          "id": "membrane.skillGates",
+          "name": "Skill Gates"
+        },
+        {
+          "id": "membrane.agentLocks",
+          "name": "Agent Locks"
+        },
+        {
+          "id": "membrane.failurePatterns",
+          "name": "Failure Patterns"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "membrane.build",
+        "title": "Build Membrane Index",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.incrementalBuild",
+        "title": "Incremental Build",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.watch",
+        "title": "Toggle File Watcher",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.harvest",
+        "title": "Harvest Context",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.ask",
+        "title": "Ask about Codebase",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.graphView",
+        "title": "View Dependency Graph",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.skillsPlan",
+        "title": "Get Skill Plan",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.skillsRun",
+        "title": "Run Skill Gates",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.skillsHistory",
+        "title": "Show Evidence Bundles",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.debtReport",
+        "title": "Show Context Debt",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.locksShow",
+        "title": "Show Agent Locks",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.patternsShow",
+        "title": "Show Failure Patterns",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.contractsShow",
+        "title": "Show Contracts",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.couplingTrend",
+        "title": "Show Coupling Trend",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.harnessInstall",
+        "title": "Install Harness",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.harnessValidate",
+        "title": "Validate Harness",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.setup",
+        "title": "Open Setup Wizard",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.mcpConfigure",
+        "title": "Configure MCP Server",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.openSettings",
+        "title": "Open Settings",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.refreshSymbolExplorer",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "membrane.refreshContextDebt",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "membrane.refreshSkillGates",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "membrane.refreshAgentLocks",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "membrane.refreshFailurePatterns",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "configuration": {
+      "title": "Membrane",
+      "properties": {
+        "membrane.autoMcpConfigure": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically configure .mcp.json on activation"
+        },
+        "membrane.autoWatch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically watch files for changes and trigger incremental builds"
+        },
+        "membrane.embeddingProvider": {
+          "type": "string",
+          "enum": [
+            "hash",
+            "openai",
+            "azure_foundry"
+          ],
+          "default": "hash",
+          "description": "Embedding provider: hash (local), openai, or azure_foundry"
+        },
+        "membrane.llmProvider": {
+          "type": "string",
+          "enum": [
+            "",
+            "openai",
+            "azure_foundry"
+          ],
+          "default": "",
+          "description": "LLM provider for ask/harvest operations (optional)"
+        },
+        "membrane.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API key (stored securely)",
+          "markdownDescription": "OpenAI API key. Use `Ctrl+Shift+M` settings to set securely."
+        },
+        "membrane.azureEndpoint": {
+          "type": "string",
+          "default": "",
+          "description": "Azure OpenAI endpoint URL"
+        },
+        "membrane.azureApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Azure OpenAI API key (stored securely)"
+        },
+        "membrane.azureDeployment": {
+          "type": "string",
+          "default": "",
+          "description": "Azure OpenAI deployment name"
+        },
+        "membrane.azureEmbeddingDeployment": {
+          "type": "string",
+          "default": "",
+          "description": "Azure OpenAI embedding deployment name"
+        },
+        "membrane.jiraBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Jira base URL for ticket extraction"
+        },
+        "membrane.jiraEmail": {
+          "type": "string",
+          "default": "",
+          "description": "Jira email address"
+        },
+        "membrane.jiraApiToken": {
+          "type": "string",
+          "default": "",
+          "description": "Jira API token (stored securely)"
+        },
+        "membrane.maxEmbedEntities": {
+          "type": "number",
+          "default": 2000,
+          "description": "Maximum number of entities to embed (rest stored-only)"
+        }
+      }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "membrane.refreshSymbolExplorer",
+          "when": "view == membrane.symbolExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "membrane.refreshContextDebt",
+          "when": "view == membrane.contextDebt",
+          "group": "navigation"
+        },
+        {
+          "command": "membrane.refreshSkillGates",
+          "when": "view == membrane.skillGates",
+          "group": "navigation"
+        },
+        {
+          "command": "membrane.refreshAgentLocks",
+          "when": "view == membrane.agentLocks",
+          "group": "navigation"
+        },
+        {
+          "command": "membrane.refreshFailurePatterns",
+          "when": "view == membrane.failurePatterns",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "membrane.skillsPlan",
+          "when": "resourceExtname =~ /\\.(py|ts|tsx|js|jsx)$/",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "membrane.skillsRun",
+          "when": "resourceExtname =~ /\\.(py|ts|tsx|js|jsx)$/",
+          "group": "1_modification@2"
+        },
+        {
+          "command": "membrane.harvest",
+          "group": "1_modification@3"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "membrane.skillsPlan",
+          "when": "resourceExtname =~ /\\.(py|ts|tsx|js|jsx)$/",
+          "group": "membrane@1"
+        },
+        {
+          "command": "membrane.skillsRun",
+          "when": "resourceExtname =~ /\\.(py|ts|tsx|js|jsx)$/",
+          "group": "membrane@2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "membrane.build",
+        "key": "ctrl+shift+m b",
+        "mac": "cmd+shift+m b",
+        "when": "editorFocus || explorerFocus"
+      },
+      {
+        "command": "membrane.harvest",
+        "key": "ctrl+shift+m h",
+        "mac": "cmd+shift+m h",
+        "when": "editorFocus || explorerFocus"
+      },
+      {
+        "command": "membrane.graphView",
+        "key": "ctrl+shift+m g",
+        "mac": "cmd+shift+m g",
+        "when": "editorFocus || explorerFocus"
+      }
+    ]
+  }
+}

@@ -50,7 +50,7 @@ class SecurityScanSkill:
                 output="bandit not found — skipped. Install: pip install bandit",
                 findings=["⚠ bandit not available"],
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed = (time.perf_counter() - t0) * 1000
             return SkillResult(
                 skill=self.name,

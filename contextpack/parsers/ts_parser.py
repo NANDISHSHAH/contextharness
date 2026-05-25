@@ -8,7 +8,8 @@ from contextpack.core.models import EntityType, ParsedEntity
 
 try:
     import tree_sitter_typescript as tsts
-    from tree_sitter import Language, Parser as TSParser
+    from tree_sitter import Language
+    from tree_sitter import Parser as TSParser
 except ImportError:
     tsts = None  # type: ignore[assignment]
     TSParser = None  # type: ignore[assignment,misc]
@@ -55,10 +56,20 @@ class TypeScriptParser:
                         imports=list(imports),
                     )
                 )
-            elif node.type in ("function_declaration", "method_definition", "arrow_function"):
-                if node.type == "arrow_function" and node.parent and node.parent.type != "variable_declarator":
+            elif node.type in (
+                "function_declaration",
+                "method_definition",
+                "arrow_function",
+            ):
+                if (
+                    node.type == "arrow_function"
+                    and node.parent
+                    and node.parent.type != "variable_declarator"
+                ):
                     return
-                name = _ts_name(node, content) or _parent_var_name(node, content)
+                name = _ts_name(node, content) or _parent_var_name(
+                    node, content
+                )
                 if name:
                     entities.append(
                         ParsedEntity(

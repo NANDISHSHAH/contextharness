@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from contextpack.parsers.ts_parser import TypeScriptParser, _extract_routes
 from contextpack.core.models import ParsedEntity
+from contextpack.parsers.ts_parser import TypeScriptParser, _extract_routes
 
 try:
     import tree_sitter_javascript as tsjs
-    from tree_sitter import Language, Parser as TSParserCore
+    from tree_sitter import Language
+    from tree_sitter import Parser as TSParserCore
 except ImportError:
     tsjs = None  # type: ignore[assignment]
     TSParserCore = None  # type: ignore[assignment,misc]

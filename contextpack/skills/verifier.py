@@ -110,10 +110,31 @@ class SkillVerifierLoop:
 
         # ── 4. Execute skills ─────────────────────────────────────────────────
         composer = SkillComposer()
-        skill_results = await composer.run(plan.required_skills, repo_path)
-        all_passed = all(r.passed for r in skill_results)
-        failed = [r.skill for r in skill_results if not r.passed and not r.skipped]
-        block_reason = f"Skills failed: {', '.join(failed)}" if failed else ""
+        # Run required + advisory together; advisory results never block
+        all_to_run = list(plan.required_skills) + [
+            s for s in plan.advisory_skills if s not in plan.required_skills
+        ]
+        skill_results = await composer.run(all_to_run, repo_path)
+
+        advisory_set = set(plan.advisory_skills)
+        required_results = [r for r in skill_results if r.skill not in advisory_set]
+        # Allowed when all REQUIRED (non-advisory) skills passed
+        all_passed = all(r.passed for r in required_results)
+        failed = [r.skill for r in required_results if not r.passed and not r.skipped]
+        advisory_failed = [
+            r.skill
+            for r in skill_results
+            if r.skill in advisory_set and not r.passed and not r.skipped
+        ]
+        block_reason = (
+            f"Skills failed: {', '.join(failed)}" if failed else ""
+        )
+        if advisory_failed and not failed:
+            # Don't block; just note advisory warnings in reasoning
+            plan.reasoning = (
+                (plan.reasoning + "; " if plan.reasoning else "")
+                + f"advisory warnings: {', '.join(advisory_failed)}"
+            )
 
         result = VerifierResult(
             allowed=all_passed,

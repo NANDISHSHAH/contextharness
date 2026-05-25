@@ -228,11 +228,31 @@ def vibe_build_footer(console: Console, stats: object, embed_provider: str) -> N
     table.add_column(style="dim")
 
     provider_label = f"[dim]{embed_provider}[/dim]"
-    table.add_row("files scanned",    f"[cyan]{files_scanned:,}[/cyan]",                 f"[dim]{files_skipped:,} skipped[/dim]")
-    table.add_row("entities embedded", f"[bright_green]{embed_count:,}[/bright_green]",  f"[dim]{store_only:,} store-only[/dim]")
-    table.add_row("tokens indexed",   f"[yellow]~{_tok(tokens)}[/yellow]",               "[dim]estimated[/dim]")
-    table.add_row("embed cost",       _fmt_cost(embed_cost, embed_provider),              provider_label)
-    table.add_row("total time",       f"[bold white]{total_t:.2f}s[/bold white]",        "")
+    table.add_row(
+        "files scanned",
+        f"[cyan]{files_scanned:,}[/cyan]",
+        f"[dim]{files_skipped:,} skipped[/dim]",
+    )
+    table.add_row(
+        "entities embedded",
+        f"[bright_green]{embed_count:,}[/bright_green]",
+        f"[dim]{store_only:,} store-only[/dim]",
+    )
+    table.add_row(
+        "tokens indexed",
+        f"[yellow]~{_tok(tokens)}[/yellow]",
+        "[dim]estimated[/dim]",
+    )
+    table.add_row(
+        "embed cost",
+        _fmt_cost(embed_cost, embed_provider),
+        provider_label,
+    )
+    table.add_row(
+        "total time",
+        f"[bold white]{total_t:.2f}s[/bold white]",
+        "",
+    )
 
     console.print()
     console.print(Panel(
@@ -268,10 +288,26 @@ def vibe_ask_summary(
     table.add_column(justify="right", width=12)
     table.add_column(style="dim")
 
-    table.add_row("question",      f"[cyan]~{_tok(q_tokens)}[/cyan]",       "tokens (estimated)")
-    table.add_row("context",       f"[blue]~{_tok(context_tokens)}[/blue]", "tokens (compiled pack)")
-    table.add_row("response",      f"[green]~{_tok(a_tokens)}[/green]",     "tokens (estimated)")
-    table.add_row("[bold]total[/bold]", f"[bold white]~{_tok(total)}[/bold white]", "")
+    table.add_row(
+        "question",
+        f"[cyan]~{_tok(q_tokens)}[/cyan]",
+        "tokens (estimated)",
+    )
+    table.add_row(
+        "context",
+        f"[blue]~{_tok(context_tokens)}[/blue]",
+        "tokens (compiled pack)",
+    )
+    table.add_row(
+        "response",
+        f"[green]~{_tok(a_tokens)}[/green]",
+        "tokens (estimated)",
+    )
+    table.add_row(
+        "[bold]total[/bold]",
+        f"[bold white]~{_tok(total)}[/bold white]",
+        "",
+    )
     table.add_row("", "", "")
     table.add_row("provider",      f"[dim]{provider}[/dim]", "")
     table.add_row("est. cost",     _fmt_cost(total_cost, provider), "")

@@ -40,7 +40,11 @@ class DocsLinkCheckSkill:
 
         elapsed = (time.perf_counter() - t0) * 1000
         passed = len(broken) == 0
-        output = "\n".join(broken[:20]) if broken else f"All markdown links OK ({len(md_files)} files checked)"
+        output = (
+            "\n".join(broken[:20])
+            if broken
+            else f"All markdown links OK ({len(md_files)} files checked)"
+        )
         return SkillResult(
             skill=self.name,
             passed=passed,

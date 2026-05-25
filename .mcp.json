@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "context-harness": {
-      "command": "uv",
+      "command": "/home/nndsh/.local/bin/uv",
       "args": [
         "run",
         "--extra",
@@ -9,7 +9,7 @@
         "context-harness-mcp"
       ],
       "env": {
-        "CONTEXTPACK_ROOT": "${workspaceFolder}"
+        "CONTEXTPACK_ROOT": "/home/nndsh/Repositories/contextharness"
       }
     }
   }

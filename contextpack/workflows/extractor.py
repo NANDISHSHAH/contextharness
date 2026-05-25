@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from contextpack.core.models import ParsedEntity, Workflow, WorkflowStep
+    from contextpack.core.models import ParsedEntity, Workflow
     from contextpack.graph.engine import ContextGraph
 
 
@@ -26,13 +26,12 @@ _MIN_CHAIN = 2
 class WorkflowExtractor:
     """Extract workflows from a ContextGraph + entity list."""
 
-    def __init__(self, graph: "ContextGraph", entities: list["ParsedEntity"]) -> None:
+    def __init__(self, graph: ContextGraph, entities: list[ParsedEntity]) -> None:
         self._graph = graph
         self._entities = entities
         self._entity_map = {e.name: e for e in entities}
 
-    def extract(self) -> list["Workflow"]:
-        from contextpack.core.models import Workflow
+    def extract(self) -> list[Workflow]:
 
         workflows: list[Workflow] = []
 
@@ -57,7 +56,7 @@ class WorkflowExtractor:
                 unique.append(wf)
         return unique
 
-    def _extract_api_workflows(self) -> list["Workflow"]:
+    def _extract_api_workflows(self) -> list[Workflow]:
         from contextpack.core.models import Workflow
 
         routes = [e for e in self._entities if str(e.type) in _ROUTE_TYPES]
@@ -70,7 +69,7 @@ class WorkflowExtractor:
             return []
 
         # Group routes by file (one workflow per service file)
-        by_file: dict[str, list["ParsedEntity"]] = {}
+        by_file: dict[str, list[ParsedEntity]] = {}
         for r in routes:
             by_file.setdefault(r.file_path, []).append(r)
 
@@ -88,7 +87,7 @@ class WorkflowExtractor:
             )
         return workflows
 
-    def _extract_call_chains(self) -> list["Workflow"]:
+    def _extract_call_chains(self) -> list[Workflow]:
         """Walk dependency edges to find chains of length >= _MIN_CHAIN."""
         from contextpack.core.models import Workflow
 
@@ -109,12 +108,22 @@ class WorkflowExtractor:
                 continue
             data = self._graph.graph.nodes.get(entry, {})
             label = str(data.get("name", entry))
+            steps = [
+                str(self._graph.graph.nodes.get(n, {}).get("name", n))
+                for n in chain
+            ]
+            entities = list(
+                {
+                    str(self._graph.graph.nodes.get(n, {}).get("file", ""))
+                    for n in chain
+                }
+            )
             workflows.append(
                 Workflow(
                     name=f"call_chain::{label}",
-                    steps=[str(self._graph.graph.nodes.get(n, {}).get("name", n)) for n in chain],
+                    steps=steps,
                     summary=f"Call chain from {label} ({len(chain)} steps)",
-                    entities=list({str(self._graph.graph.nodes.get(n, {}).get("file", "")) for n in chain}),
+                    entities=entities,
                 )
             )
         return workflows
@@ -125,9 +134,11 @@ class WorkflowExtractor:
         current = start
         for _ in range(max_depth):
             successors = [
-                n for n in self._graph.graph.successors(current)
+                n
+                for n in self._graph.graph.successors(current)
                 if n not in visited
-                and str(self._graph.graph.nodes.get(n, {}).get("type", "")) not in ("import", "dependency")
+                and str(self._graph.graph.nodes.get(n, {}).get("type", ""))
+                not in ("import", "dependency")
             ]
             if not successors:
                 break
@@ -141,7 +152,7 @@ class WorkflowExtractor:
             current = nxt
         return chain
 
-    def _extract_class_flows(self) -> list["Workflow"]:
+    def _extract_class_flows(self) -> list[Workflow]:
         """Detect class → method hierarchies as lifecycle workflows."""
         from contextpack.core.models import Workflow
 
@@ -170,10 +181,10 @@ class WorkflowExtractor:
 
 
 async def extract_and_store(
-    graph: "ContextGraph",
-    entities: list["ParsedEntity"],
+    graph: ContextGraph,
+    entities: list[ParsedEntity],
     db_path: Path,
-) -> list["Workflow"]:
+) -> list[Workflow]:
     """Extract workflows and persist them to the SQLite store."""
     from contextpack.storage.sqlite import SQLiteStore
 

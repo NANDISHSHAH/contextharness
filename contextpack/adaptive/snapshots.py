@@ -47,7 +47,7 @@ class SnapshotDiff(BaseModel):
 
     def to_text(self) -> str:
         lines = [
-            f"## Context Snapshot Diff",
+            "## Context Snapshot Diff",
             f"Before: `{self.before_id}`  →  After: `{self.after_id}`",
             "",
         ]

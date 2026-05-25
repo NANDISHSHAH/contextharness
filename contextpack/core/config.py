@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     llm_provider: str = Field(
         default="",
         alias="CONTEXTPACK_LLM_PROVIDER",
-        description="azure_foundry | openai (only when using --llm / ask_llm)",
+        description="azure_foundry | openai | ollama (only when using --llm / ask_llm)",
     )
     # Azure AI Foundry / Azure OpenAI (not api.openai.com)
     azure_openai_endpoint: str | None = Field(default=None, alias="AZURE_OPENAI_ENDPOINT")
@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     )
     azure_use_inference_endpoint: bool = Field(
         default=False, alias="AZURE_USE_INFERENCE_ENDPOINT"
+    )
+    # Ollama (local OpenAI-compatible inference)
+    ollama_base_url: str = Field(
+        default="http://localhost:11434", alias="OLLAMA_BASE_URL"
+    )
+    ollama_api_key: str | None = Field(default=None, alias="OLLAMA_API_KEY")
+    ollama_model: str = Field(default="llama3.2", alias="OLLAMA_MODEL")
+    ollama_embedding_model: str = Field(
+        default="nomic-embed-text", alias="OLLAMA_EMBEDDING_MODEL"
     )
     embedding_provider: str = Field(default="hash", alias="CONTEXTPACK_EMBEDDING_PROVIDER")
     vector_store: str = Field(

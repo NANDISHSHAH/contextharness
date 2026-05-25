@@ -45,7 +45,7 @@ class TypeCheckSkill:
                 output="mypy not found — skipped. Install: pip install mypy",
                 findings=["⚠ mypy not available"],
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed = (time.perf_counter() - t0) * 1000
             return SkillResult(
                 skill=self.name,

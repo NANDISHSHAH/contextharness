@@ -1,7 +1,6 @@
 """Skill composer — DAG-ordered skill execution engine."""
 from __future__ import annotations
 
-import asyncio
 import time
 from pathlib import Path
 

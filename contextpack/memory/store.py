@@ -72,7 +72,7 @@ def build_changeset(
     old_hashes: dict[str, str],
     new_hashes: dict[str, str],
     entity_delta: dict[str, tuple[list[str], list[str], list[str]]],
-) -> "ChangeSet":
+) -> ChangeSet:
     from contextpack.core.models import ChangeSet, FileChange
 
     added, modified, deleted = diff_hashes(old_hashes, new_hashes)
@@ -141,7 +141,7 @@ def build_changeset(
     )
 
 
-def format_changeset(changeset: "ChangeSet") -> str:
+def format_changeset(changeset: ChangeSet) -> str:
     if not changeset.files_changed:
         return "No changes since last build."
     lines = [f"Changes ({changeset.summary}):"]

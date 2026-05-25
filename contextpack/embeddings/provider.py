@@ -38,7 +38,7 @@ class OpenAIEmbeddingProvider:
         return [list(d.embedding) for d in resp.data]
 
 
-def get_embedding_provider() -> HashEmbeddingProvider | OpenAIEmbeddingProvider:
+def get_embedding_provider():
     settings = get_settings()
     provider = settings.embedding_provider.lower()
     if provider == "openai":
@@ -47,6 +47,10 @@ def get_embedding_provider() -> HashEmbeddingProvider | OpenAIEmbeddingProvider:
         from contextpack.embeddings.azure import AzureFoundryEmbeddingProvider
 
         return AzureFoundryEmbeddingProvider()
+    if provider == "ollama":
+        from contextpack.embeddings.ollama import OllamaEmbeddingProvider
+
+        return OllamaEmbeddingProvider()
     return HashEmbeddingProvider()
 
 

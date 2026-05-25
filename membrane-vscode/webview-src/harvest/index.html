@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Membrane — Harvest Context</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: #1e1e1e;
+        color: #e0e0e0;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        font-size: 18px;
+        margin-bottom: 20px;
+        color: #1e90ff;
+      }
+
+      .input-section {
+        background: #2d2d2d;
+        padding: 16px;
+        border-radius: 6px;
+        border: 1px solid #404040;
+        margin-bottom: 20px;
+      }
+
+      .input-group {
+        margin-bottom: 12px;
+      }
+
+      .input-group:last-child {
+        margin-bottom: 0;
+      }
+
+      label {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 6px;
+        color: #a0a0a0;
+      }
+
+      input {
+        width: 100%;
+        padding: 8px 12px;
+        background: #1e1e1e;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        color: #e0e0e0;
+        font-size: 13px;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: #1e90ff;
+        box-shadow: 0 0 4px rgba(30, 144, 255, 0.3);
+      }
+
+      .button-group {
+        display: flex;
+        gap: 8px;
+      }
+
+      button {
+        flex: 1;
+        padding: 8px 16px;
+        background: #1e90ff;
+        border: none;
+        border-radius: 4px;
+        color: white;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #0066cc;
+      }
+
+      button:disabled {
+        background: #404040;
+        cursor: not-allowed;
+      }
+
+      .output-section {
+        background: #2d2d2d;
+        padding: 16px;
+        border-radius: 6px;
+        border: 1px solid #404040;
+      }
+
+      #output {
+        background: #1e1e1e;
+        padding: 12px;
+        border-radius: 4px;
+        border: 1px solid #404040;
+        max-height: 500px;
+        overflow-y: auto;
+        margin-bottom: 12px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .output-empty {
+        text-align: center;
+        color: #606060;
+        padding: 40px 20px;
+      }
+
+      .output-buttons {
+        display: flex;
+        gap: 8px;
+      }
+
+      .output-buttons button {
+        flex: 1;
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>Harvest Context</h1>
+
+      <div class="input-section">
+        <div class="input-group">
+          <label for="query-input">Query</label>
+          <input type="text" id="query-input" placeholder="e.g., 'How does authentication work?'" autofocus />
+        </div>
+
+        <div class="input-group">
+          <label for="branch-input">Branch (optional)</label>
+          <input type="text" id="branch-input" placeholder="Leave blank for current branch" />
+        </div>
+
+        <div class="button-group">
+          <button id="submit-btn">Harvest Context</button>
+        </div>
+      </div>
+
+      <div class="output-section">
+        <div id="output" class="output-empty">Results will appear here...</div>
+        <div class="output-buttons">
+          <button id="copy-btn">Copy</button>
+          <button id="open-editor-btn">Open in Editor</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="../harvest.js"></script>
+  </body>
+</html>

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import fnmatch
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -16,17 +15,31 @@ except ImportError:
 class MatchCriteria(BaseModel):
     """Conditions that trigger this policy."""
 
-    paths: list[str] = Field(default_factory=list, description="Glob patterns for file paths")
-    extensions_only: list[str] = Field(default_factory=list, description="Only trigger on these extensions")
-    graph_roles: list[str] = Field(default_factory=list, description="hub, entrypoint, etc.")
-    graph_hub_threshold: float = Field(default=0.7, description="Centrality threshold for hub detection")
-    blast_radius_min: int = Field(default=0, description="Min blast radius to trigger this policy")
+    paths: list[str] = Field(
+        default_factory=list, description="Glob patterns for file paths"
+    )
+    extensions_only: list[str] = Field(
+        default_factory=list, description="Only trigger on these extensions"
+    )
+    graph_roles: list[str] = Field(
+        default_factory=list, description="hub, entrypoint, etc."
+    )
+    graph_hub_threshold: float = Field(
+        default=0.7, description="Centrality threshold for hub detection"
+    )
+    blast_radius_min: int = Field(
+        default=0, description="Min blast radius to trigger this policy"
+    )
 
 
 class RequireSpec(BaseModel):
     """What this policy mandates."""
 
     skills: list[str] = Field(default_factory=list)
+    advisory_skills: list[str] = Field(
+        default_factory=list,
+        description="Skills that run but never block (warnings only)",
+    )
     max_blast_radius: int | None = None
     human_review: bool = False
 
@@ -43,7 +56,7 @@ class SkillManifest(BaseModel):
     policies: list[SkillPolicy] = Field(default_factory=list)
 
     @classmethod
-    def load(cls, repo_path: Path) -> "SkillManifest":
+    def load(cls, repo_path: Path) -> SkillManifest:
         """Load skills.yml from repo. Returns default manifest if not found."""
         candidates = [
             repo_path / "skills.yml",
@@ -88,21 +101,30 @@ class SkillManifest(BaseModel):
         return matched
 
     @classmethod
-    def default(cls) -> "SkillManifest":
-        """Sensible defaults for repos without a skills.yml."""
+    def default(cls) -> SkillManifest:
+        """Sensible defaults for repos without a skills.yml.
+
+        Lint is advisory by default (runs but never blocks). Hub nodes get
+        type-checked but lint remains advisory there too. Users can override
+        by creating .contextpack/skills.yml.
+        """
         return cls(
             policies=[
                 SkillPolicy(
                     name="default",
-                    description="Default: lint everything",
+                    description="Default: lint as advisory (non-blocking)",
                     match=MatchCriteria(),
-                    require=RequireSpec(skills=["lint"]),
+                    require=RequireSpec(skills=[], advisory_skills=["lint"]),
                 ),
                 SkillPolicy(
                     name="hub_node_changes",
-                    description="Hub nodes always get type-checked",
+                    description="Hub nodes get type-checked; lint stays advisory",
                     match=MatchCriteria(graph_roles=["hub"], graph_hub_threshold=0.7),
-                    require=RequireSpec(skills=["lint", "type_check"], max_blast_radius=50),
+                    require=RequireSpec(
+                        skills=["type_check"],
+                        advisory_skills=["lint"],
+                        max_blast_radius=50,
+                    ),
                 ),
             ]
         )

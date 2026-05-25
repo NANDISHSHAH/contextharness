@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Membrane — Setup Wizard</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: linear-gradient(135deg, #1e90ff, #0066cc);
+        color: #e0e0e0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .wizard-container {
+        background: #2d2d2d;
+        border-radius: 8px;
+        border: 1px solid #404040;
+        max-width: 600px;
+        width: 100%;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+      }
+
+      .wizard-header {
+        background: linear-gradient(135deg, #1e90ff, #0066cc);
+        padding: 40px 30px;
+        text-align: center;
+        border-bottom: 1px solid #404040;
+      }
+
+      .wizard-header h1 {
+        font-size: 28px;
+        margin-bottom: 10px;
+        color: white;
+      }
+
+      .wizard-header p {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      .wizard-content {
+        padding: 40px 30px;
+      }
+
+      .step {
+        display: none;
+      }
+
+      .step.current {
+        display: block;
+      }
+
+      .step h2 {
+        font-size: 18px;
+        margin-bottom: 20px;
+        color: #1e90ff;
+      }
+
+      .step p {
+        font-size: 14px;
+        line-height: 1.6;
+        color: #c0c0c0;
+        margin-bottom: 16px;
+      }
+
+      .step ul {
+        margin-left: 20px;
+        margin-bottom: 16px;
+      }
+
+      .step li {
+        font-size: 14px;
+        line-height: 1.6;
+        color: #c0c0c0;
+        margin-bottom: 8px;
+      }
+
+      .progress-bar {
+        height: 4px;
+        background: #404040;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 20px;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: #1e90ff;
+        transition: width 0.3s ease;
+      }
+
+      #step-progress {
+        padding: 16px;
+        background: #1e1e1e;
+        border-radius: 4px;
+        border-left: 3px solid #1e90ff;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 12px;
+        color: #a0ff00;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+
+      .wizard-footer {
+        padding: 20px 30px;
+        border-top: 1px solid #404040;
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+      }
+
+      button {
+        padding: 10px 20px;
+        background: #1e90ff;
+        border: none;
+        border-radius: 4px;
+        color: white;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover:not(:disabled) {
+        background: #0066cc;
+      }
+
+      button:disabled {
+        background: #404040;
+        cursor: not-allowed;
+      }
+
+      #skip-btn {
+        background: #404040;
+      }
+
+      #skip-btn:hover {
+        background: #505050;
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wizard-container">
+      <div class="wizard-header">
+        <h1>Membrane</h1>
+        <p>Context Intelligence & Agent Governance</p>
+      </div>
+
+      <div class="wizard-content">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 0%;" id="progress-fill"></div>
+        </div>
+
+        <!-- Step 0: Welcome -->
+        <div class="step current" id="step-0">
+          <h2>Welcome!</h2>
+          <p>Membrane will help you set up graph-native codebase understanding for your workspace.</p>
+          <p>This wizard will:</p>
+          <ul>
+            <li>Verify Python environment</li>
+            <li>Initialize your workspace</li>
+            <li>Build the semantic graph</li>
+            <li>Configure MCP server integration</li>
+          </ul>
+          <p style="margin-top: 20px; color: #1e90ff;">Let's get started!</p>
+        </div>
+
+        <!-- Step 1: Environment Check -->
+        <div class="step" id="step-1">
+          <h2>Python Environment</h2>
+          <p>Checking your Python setup...</p>
+          <div id="step-progress">Checking uv executable...</div>
+        </div>
+
+        <!-- Step 2: Initialization -->
+        <div class="step" id="step-2">
+          <h2>Initializing</h2>
+          <p>Setting up .contextpack directory...</p>
+          <div id="step-progress">Initializing workspace...</div>
+        </div>
+
+        <!-- Step 3: Build -->
+        <div class="step" id="step-3">
+          <h2>Building Index</h2>
+          <p>Scanning and parsing your codebase...</p>
+          <div id="step-progress">Starting build...</div>
+        </div>
+
+        <!-- Step 4: MCP Configuration -->
+        <div class="step" id="step-4">
+          <h2>Configuring MCP</h2>
+          <p>Setting up MCP server integration with Claude Code...</p>
+          <div id="step-progress">Configuring MCP server...</div>
+        </div>
+
+        <!-- Step 5: Complete -->
+        <div class="step" id="step-5">
+          <h2>Setup Complete!</h2>
+          <p>Membrane is now ready to use. Here's what you can do:</p>
+          <ul>
+            <li>
+              <strong>View your code graph:</strong> Run "View Dependency Graph" command
+            </li>
+            <li>
+              <strong>Harvest context:</strong> Use "Harvest Context" for AI queries
+            </li>
+            <li>
+              <strong>Monitor health:</strong> Check Context Debt view in the sidebar
+            </li>
+            <li>
+              <strong>Work with Claude Code:</strong> Use @membrane in your agents
+            </li>
+          </ul>
+          <p style="margin-top: 20px; color: #1e90ff;">Happy coding! 🧠</p>
+        </div>
+      </div>
+
+      <div class="wizard-footer">
+        <button id="skip-btn">Skip</button>
+        <div>
+          <button id="prev-btn" disabled>← Back</button>
+          <button id="next-btn">Next →</button>
+          <button id="finish-btn" class="hidden">Finish</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="../wizard.js"></script>
+  </body>
+</html>

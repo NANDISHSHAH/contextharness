@@ -8,7 +8,8 @@ from contextpack.core.models import EntityType, ParsedEntity
 
 try:
     import tree_sitter_python as tspython
-    from tree_sitter import Language, Parser as TSParser
+    from tree_sitter import Language
+    from tree_sitter import Parser as TSParser
 except ImportError:
     tspython = None  # type: ignore[assignment]
     TSParser = None  # type: ignore[assignment,misc]
@@ -56,7 +57,11 @@ class PythonParser:
             elif node.type == "function_definition":
                 name = _child_identifier(node, content)
                 parent = node.parent
-                etype = EntityType.METHOD if parent and parent.type == "class_definition" else EntityType.FUNCTION
+                etype = (
+                    EntityType.METHOD
+                    if parent and parent.type == "class_definition"
+                    else EntityType.FUNCTION
+                )
                 entities.append(
                     ParsedEntity(
                         type=etype,

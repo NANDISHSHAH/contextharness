@@ -1,11 +1,9 @@
 """Trust scorer — 5-tier trust scoring for context chunks."""
 from __future__ import annotations
 
-import time
 from enum import IntEnum
-from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class TrustTier(IntEnum):

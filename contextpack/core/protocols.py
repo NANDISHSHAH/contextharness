@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from contextpack.core.models import (
-    AggregatedAgentContext,
-    ContextPack,
     HarvestedContext,
     ParsedEntity,
     ProjectMap,
