@@ -1,8 +1,8 @@
 # Product Requirements Document — ContextPack + Context Harness
 
-**Version:** 0.2
+**Version:** 0.3
 **Status:** Alpha
-**Date:** 2026-05-21
+**Date:** 2026-05-24
 
 ---
 
@@ -88,15 +88,61 @@ Together they deliver **grounded, auditable, portable context** for any AI agent
 
 | # | Requirement | Priority |
 |---|-------------|----------|
-| H1 | `sessionStart` hook: inject orientation briefing, warn if index is stale | P0 |
-| H2 | `stop` hook: validate `AGENTS.md` against graph hubs, suggest updates | P0 |
-| H3 | MCP server (`context-harness-mcp`) exposing `harvest_context`, `find_symbol` | P0 |
-| H4 | `harvest-review` skill for pre-edit context harvest | P0 |
-| H5 | `scoped-tests` skill for targeted test discovery | P0 |
-| H6 | Read-only `explorer` agent for repo navigation | P0 |
-| H7 | `context harness` CLI (`orient`, `validate`, `install`) | P0 |
-| H8 | Multi-agent shared memory / cross-agent context store | P2 (Phase 5) |
+| H1 | `sessionStart` hook: inject orientation briefing, warn if index is stale | P0 ✓ |
+| H2 | `stop` hook: validate `AGENTS.md` against graph hubs, suggest updates | P0 ✓ |
+| H3 | MCP server (`context-harness-mcp`) exposing `harvest_context`, `find_symbol` | P0 ✓ |
+| H4 | `harvest-review` skill for pre-edit context harvest | P0 ✓ |
+| H5 | `scoped-tests` skill for targeted test discovery | P0 ✓ |
+| H6 | Read-only `explorer` agent for repo navigation | P0 ✓ |
+| H7 | `context harness` CLI (`orient`, `validate`, `install`) | P0 ✓ |
+| H8 | Multi-agent shared memory / cross-agent context store | P0 ✓ (Phase 5) |
 | H9 | Auto-harvest on `beforeSubmitPrompt` hook (opt-in) | P2 (Phase 5) |
+
+### 6.3 Pre-Skill Engine (Phase 6)
+
+| # | Requirement | Priority |
+|---|-------------|----------|
+| S1 | `skills.yml` — declarative policy manifest per path, file type, blast radius, graph role | P0 |
+| S2 | `SkillRouter` — diff → `SkillPlan` (risk score, policies matched, required gates) | P0 |
+| S3 | `SkillComposer` — DAG-aware execution order (lint → type_check → security_scan) | P0 |
+| S4 | `SkillVerifierLoop` — block agent until all required skills pass | P0 |
+| S5 | `BlastRadiusEnforcer` — hard cap per policy; returns decomposition plan when exceeded | P0 |
+| S6 | `ReasoningCheckpoint` — validate agent's stated understanding vs. graph before hub edits | P1 |
+| S7 | `EvidenceBundle` — per-action audit record (skills run, context used, result) in SQLite | P0 |
+| S8 | Built-in skills: `lint`, `type_check`, `security_scan`, `docs_link_check` (pluggable shell runners) | P0 |
+| S9 | `beforeFileWrite` hook — checks edit token before allowing write | P0 |
+| S10 | MCP tools: `get_skill_plan`, `run_skill_gate`, `get_evidence_bundle` | P0 |
+
+### 6.4 Semantic Contract Layer (Phase 7)
+
+| # | Requirement | Priority |
+|---|-------------|----------|
+| C1 | `ContractExtractor` — extract preconditions, postconditions, invariants per symbol | P1 |
+| C2 | `ContractRegistry` — SQLite-backed store, queryable via MCP + CLI | P1 |
+| C3 | `InvariantGuard` — `invariants.yml` + counterfactual graph check on proposed diff | P0 |
+| C4 | `NegativeContextIndex` — anti-pattern registry with remediation, surfaced in context | P1 |
+| C5 | `IntentPreserver` — behavioral invariants from tests, verified against proposed patch | P1 |
+
+### 6.5 Context Governance & Trust (Phase 8)
+
+| # | Requirement | Priority |
+|---|-------------|----------|
+| G1 | 5-tier trust scoring per context chunk (code → tests → docs → comments → external) | P0 |
+| G2 | Per-module context debt score — staleness × churn × hub centrality | P0 |
+| G3 | Provenance chain per chunk — file hash, git commit, author, CI status | P1 |
+| G4 | Budget risk signal — flag when minimum safe context > token budget | P0 |
+| G5 | `AgentLockTable` — dependency-level lock for multi-agent conflict detection | P1 |
+| G6 | Trust-aware `ContextCompiler` — risk-gated source selection (high risk = Tier 1–2 only) | P0 |
+
+### 6.6 Adaptive Intelligence (Phase 9)
+
+| # | Requirement | Priority |
+|---|-------------|----------|
+| A1 | `FailurePatternStore` — classify and store skill failures by type, file pattern, frequency | P1 |
+| A2 | `ProactivePatternBriefing` — surface relevant failure patterns before agent acts | P1 |
+| A3 | `PlaybookLearner` — propose `skills.yml` policy additions from observed successful runs | P2 |
+| A4 | `ContextSnapshotEngine` — snapshot + diff context state across agent runs | P1 |
+| A5 | `CouplingMonitor` — track coupling trends over time, alert on architectural decay | P1 |
 
 ### 6.3 Performance & Operations
 
@@ -172,11 +218,17 @@ Context Harness (hooks · MCP · skills · validate)
 
 | Phase | Status | Theme |
 |-------|--------|-------|
-| 1 — Foundation | Done | Scanner, graph, embeddings, retrieval |
-| 2 — Context intelligence | Done | Compiler, harvester, aggregator, adapters |
-| 3 — Live memory | Planned | Incremental updates, git diff, temporal memory |
-| 4 — Context Harness MVP | Done | Hooks, MCP, skills, validator |
-| 5 — Live harness | Planned | Multi-agent memory, workflow extraction, cloud sync |
+| 1 — Foundation | ✅ Done | Scanner, graph, embeddings, retrieval |
+| 2 — Context intelligence | ✅ Done | Compiler, harvester, aggregator, adapters |
+| 3 — Live memory | ✅ Done | Incremental updates, change log, watch mode |
+| 4 — Context Harness MVP | ✅ Done | Hooks, MCP, skills, validator |
+| 5 — Live harness | ✅ Done | Multi-agent memory, workflow extraction |
+| 6 — Pre-Skill Engine | 🔵 Planned | Skill manifest, router, verifier loop, blast radius enforcement |
+| 7 — Semantic Contract Layer | 🔵 Planned | Contract registry, invariant guard, intent preservation |
+| 8 — Context Governance & Trust | 🔵 Planned | Trust tiers, provenance chains, multi-agent conflict detection |
+| 9 — Adaptive Intelligence | 🔵 Planned | Failure pattern memory, playbook learning, coupling monitor |
+
+> Full plan with architecture, research backing, and open questions: [PLAN_NEXT_PHASES.md](PLAN_NEXT_PHASES.md)
 
 ---
 

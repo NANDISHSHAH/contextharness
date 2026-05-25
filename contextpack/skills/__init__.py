@@ -120,4 +120,36 @@ class SharedMemory:
         return "\n".join(lines)
 
 
-__all__ = ["AgentMemory", "SharedMemory"]
+# ── Phase 6: Pre-Skill Engine ────────────────────────────────────────────────
+from contextpack.skills.manifest import SkillManifest, SkillPolicy, MatchCriteria, RequireSpec
+from contextpack.skills.router import SkillRouter, SkillPlan
+from contextpack.skills.composer import SkillComposer, SkillResult, SKILL_DAG
+from contextpack.skills.enforcer import BlastRadiusEnforcer, DecompositionPlan, SubTask
+from contextpack.skills.checkpoint import ReasoningCheckpoint, CheckpointResult
+from contextpack.skills.evidence import EvidenceBundle, EvidenceStore
+from contextpack.skills.verifier import SkillVerifierLoop, VerifierResult
+
+__all__ = [
+    # Phase 5 (existing)
+    "AgentMemory",
+    "SharedMemory",
+    # Phase 6 (new)
+    "SkillManifest",
+    "SkillPolicy",
+    "MatchCriteria",
+    "RequireSpec",
+    "SkillRouter",
+    "SkillPlan",
+    "SkillComposer",
+    "SkillResult",
+    "SKILL_DAG",
+    "BlastRadiusEnforcer",
+    "DecompositionPlan",
+    "SubTask",
+    "ReasoningCheckpoint",
+    "CheckpointResult",
+    "EvidenceBundle",
+    "EvidenceStore",
+    "SkillVerifierLoop",
+    "VerifierResult",
+]
