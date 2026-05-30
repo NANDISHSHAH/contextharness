@@ -316,13 +316,29 @@ def graphify(
         json_path.write_text(graph_json, encoding="utf-8")
         console.print(f"[green]✓[/green] graph.json → {json_path}")
 
+    # Load vis.js — prefer local copy (offline/corporate), fall back to CDN
+    vis_script_tag = '<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>'
+    vis_candidates = [
+        # Installed alongside membrane-vscode extension
+        _Path.home() / ".vscode" / "extensions" / "membrane.membrane-vscode-0.1.0" / "media" / "vis-network.min.js",
+        # Sibling install (dev)
+        _Path(__file__).parent.parent.parent / "membrane-vscode" / "media" / "vis-network.min.js",
+        # node_modules in cwd
+        _Path.cwd() / "node_modules" / "vis-network" / "standalone" / "umd" / "vis-network.min.js",
+    ]
+    for candidate in vis_candidates:
+        if candidate.exists():
+            vis_js = candidate.read_text(encoding="utf-8")
+            vis_script_tag = f"<script>{vis_js}</script>"
+            break
+
     # Write self-contained vis.js HTML
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <title>Membrane — Dependency Graph</title>
-<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+{vis_script_tag}
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{background:#0d0d0d;color:#c8c8c8;font-family:'JetBrains Mono',monospace;height:100vh;overflow:hidden}}
