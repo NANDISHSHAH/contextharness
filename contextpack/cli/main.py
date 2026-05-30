@@ -252,51 +252,124 @@ def graphify(
     if not stdout:
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Build graph data from project_map (the built index)
+    # Build a file-level dependency graph from Python/TS imports
     try:
+        import ast as _ast
+
         pm = project._load_project_map()
-        entities = pm.entities or []
-        files = pm.files or []
+        all_files = pm.files or []
+
+        # Index: module-path fragment → file path
+        file_index: dict[str, str] = {}
+        for f in all_files:
+            fid = str(f) if isinstance(f, str) else str(getattr(f, "path", f))
+            if not fid:
+                continue
+            # Register by path stem variants for import matching
+            p2 = _Path(fid)
+            key = str(p2.with_suffix("")).replace("/", ".").replace("\\", ".")
+            file_index[key] = fid
+            file_index[p2.stem] = fid
+            # also register parent.stem
+            if p2.parent.name:
+                file_index[f"{p2.parent.name}.{p2.stem}"] = fid
+
+        # Parse source files for import statements
+        edge_set: set[tuple[str, str]] = set()
+        in_degree: dict[str, int] = {}
+
+        source_files = [
+            f for f in all_files
+            if not isinstance(f, str)
+            and str(getattr(f, "path", "")).endswith((".py", ".ts", ".tsx", ".js", ".jsx"))
+        ]
+        # Also handle string-only file lists
+        if not source_files:
+            source_files_str = [
+                str(f) for f in all_files
+                if str(f).endswith((".py", ".ts", ".tsx", ".js", ".jsx"))
+            ]
+        else:
+            source_files_str = [str(getattr(f, "path", f)) for f in source_files]
+
+        for rel_path in source_files_str:
+            abs_path = path / rel_path
+            if not abs_path.exists():
+                continue
+            try:
+                src = abs_path.read_text(encoding="utf-8", errors="ignore")
+                if rel_path.endswith(".py"):
+                    tree = _ast.parse(src, filename=rel_path)
+                    for node in _ast.walk(tree):
+                        mod = None
+                        if isinstance(node, _ast.Import):
+                            for alias in node.names:
+                                mod = alias.name
+                        elif isinstance(node, _ast.ImportFrom) and node.module:
+                            mod = node.module
+                        if not mod:
+                            continue
+                        # Match to a known file
+                        target = (
+                            file_index.get(mod)
+                            or file_index.get(mod.split(".")[-1])
+                            or file_index.get(".".join(mod.split(".")[-2:]))
+                        )
+                        if target and target != rel_path:
+                            edge_set.add((rel_path, target))
+                            in_degree[target] = in_degree.get(target, 0) + 1
+            except Exception:
+                pass
+
+        # Count connections per file
+        conn_count: dict[str, int] = {}
+        for src_f, tgt_f in edge_set:
+            conn_count[src_f] = conn_count.get(src_f, 0) + 1
+            conn_count[tgt_f] = conn_count.get(tgt_f, 0) + 1
+
+        # Also count entities per file as a proxy for importance
+        entity_count: dict[str, int] = {}
+        for e in (pm.entities or []):
+            fp = str(getattr(e, "file_path", "") or "")
+            if fp:
+                entity_count[fp] = entity_count.get(fp, 0) + 1
+
+        # Build node list — only include source files, cap at 400 most connected
+        file_ids = list({
+            str(f) if isinstance(f, str) else str(getattr(f, "path", f))
+            for f in all_files
+            if str(f if isinstance(f, str) else getattr(f, "path", f)).endswith(
+                (".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml", ".md")
+            )
+        })
+
+        # Score = connections * 3 + entity_count
+        def file_score(fid: str) -> int:
+            return conn_count.get(fid, 0) * 3 + entity_count.get(fid, 0)
+
+        file_ids.sort(key=file_score, reverse=True)
+        file_ids = file_ids[:400]
+        visible_set = set(file_ids)
+
+        hub_threshold = max(3, int(len(file_ids) * 0.05))  # top 5% = hub
 
         graph_data: dict = {"nodes": [], "edges": []}
-        seen_ids: set = set()
-        conn_count: dict = {}
+        for fid in file_ids:
+            c = conn_count.get(fid, 0)
+            ec = entity_count.get(fid, 0)
+            graph_data["nodes"].append({
+                "id": fid,
+                "label": _Path(fid).name,
+                "isHub": c >= hub_threshold,
+                "type": "file",
+                "filePath": fid,
+                "connections": c,
+                "entities": ec,
+            })
 
-        for e in entities:
-            eid = str(getattr(e, "name", ""))
-            if not eid:
-                continue
-            deps = list(getattr(e, "dependencies", []) or getattr(e, "imports", []) or [])
-            for dep in deps:
-                dep_str = str(dep)
-                conn_count[eid] = conn_count.get(eid, 0) + 1
-                conn_count[dep_str] = conn_count.get(dep_str, 0) + 1
-                graph_data["edges"].append({"from": eid, "to": dep_str})
-
-        for f in files:
-            fid = str(f) if isinstance(f, str) else str(getattr(f, "path", f))
-            if fid and fid not in seen_ids:
-                seen_ids.add(fid)
-                c = conn_count.get(fid, 0)
-                graph_data["nodes"].append({
-                    "id": fid, "label": _Path(fid).name,
-                    "isHub": c >= 5, "type": "file", "filePath": fid, "connections": c,
-                })
-
-        for e in entities:
-            eid = str(getattr(e, "name", ""))
-            if eid and eid not in seen_ids:
-                seen_ids.add(eid)
-                c = conn_count.get(eid, 0)
-                fp = str(getattr(e, "file_path", "") or "")
-                graph_data["nodes"].append({
-                    "id": eid,
-                    "label": eid,
-                    "isHub": c >= 5,
-                    "type": str(getattr(e, "type", "function")),
-                    "filePath": fp,
-                    "connections": c,
-                })
+        for src_f, tgt_f in edge_set:
+            if src_f in visible_set and tgt_f in visible_set:
+                graph_data["edges"].append({"from": src_f, "to": tgt_f})
 
     except Exception as exc:
         if not stdout:
@@ -369,10 +442,17 @@ const nodes=new vis.DataSet(data.nodes.map(n=>{{
   return{{id:n.id,label:n.label,color:{{background:col,border:col,highlight:{{background:'#fff',border:col}}}},size:hub?Math.min(60,20+c*2):Math.min(40,14+c*1.2),font:{{color:'#e8e8e8',size:11}},_raw:n}};
 }}));
 const edges=new vis.DataSet(data.edges.map((e,i)=>{{return{{id:i,from:e.from||e.source,to:e.to||e.target,arrows:'to',color:{{color:'#333',highlight:'#007acc'}},width:1}};}}));
+const nodeCount=data.nodes.length;
 const net=new vis.Network(document.getElementById('graph'),{{nodes,edges}},{{
-  physics:{{forceAtlas2Based:{{gravitationalConstant:-50,centralGravity:0.01,springLength:120,damping:0.4}},solver:'forceAtlas2Based',stabilization:{{iterations:200}}}},
-  interaction:{{hover:true,navigationButtons:false,keyboard:true}},
+  physics:{{
+    forceAtlas2Based:{{gravitationalConstant:-26,centralGravity:0.005,springLength:100,damping:0.5}},
+    solver:'forceAtlas2Based',
+    stabilization:{{iterations:nodeCount>150?50:150,updateInterval:25}},
+    adaptiveTimestep:true,
+  }},
+  interaction:{{hover:true,navigationButtons:false,keyboard:true,tooltipDelay:300}},
 }});
+net.on('stabilizationIterationsDone',function(){{net.setOptions({{physics:{{enabled:false}}}});}});
 net.on('click',p=>{{
   if(p.nodes.length){{
     const n=nodes.get(p.nodes[0]);const r=n._raw||{{}};
