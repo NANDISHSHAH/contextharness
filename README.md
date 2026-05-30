@@ -1,4 +1,8 @@
-# ContextPack + Context Harness
+# ContextPack + Context Harness + Membrane
+
+<p align="center">
+  <img src="membrane-vscode/media/membrane-logo.svg" alt="Membrane" width="120"/>
+</p>
 
 [License: MIT](LICENSE)
 [Python 3.11+](https://www.python.org/downloads/)
@@ -8,7 +12,115 @@
 
 **Context Harness** is the workflow layer on top: Cursor/Claude hooks, MCP tools, skills, and doc/graph validation — a closed loop between *how agents work* and *what they see*. Phases 6–9 extend the harness with deterministic skill gates, semantic contract verification, trust-aware context compilation, and adaptive self-improvement.
 
-See [HARNESS.md](HARNESS.md) for the full architecture.
+**Membrane** is the VS Code extension that brings the full harness into your editor — interactive dependency graphs, @membrane chat, real-time skill gate diagnostics, context debt dashboards, and agent conflict monitoring, all powered by the same Python backend.
+
+See [HARNESS.md](HARNESS.md) for the full backend architecture.
+See [membrane-vscode/DEVELOPMENT.md](membrane-vscode/DEVELOPMENT.md) for the extension architecture.
+
+---
+
+## Membrane — VS Code Extension
+
+Install `membrane-vscode-0.1.0.vsix` via **Extensions → Install from VSIX** (or `code --install-extension membrane-vscode/membrane-vscode-0.1.0.vsix`).
+
+### Features
+
+**Graph Panel — Interactive Dependency Graph**
+
+`Cmd+Shift+M G` opens a full-screen force-directed graph powered by vis.js:
+- Hub nodes highlighted in red (high connectivity), modules in blue
+- Left sidebar: search, layout selector (force / hierarchical / circular), type filter, zoom controls
+- Click any node → slide-in info panel showing name, type, file path, connection count + **Open in Editor** button
+- Empty state links to Build Index; loading spinner during data fetch
+
+**@membrane Chat Participant**
+
+Use `@membrane` in VS Code Chat (requires VS Code ≥ 1.90):
+```
+@membrane status          → index summary: entities, files, hubs
+@membrane debt            → context debt table with trend arrows
+@membrane conflicts       → active agent locks
+@membrane patterns        → recurring failure pattern briefing
+@membrane trust           → low-trust file report
+@membrane <anything>      → free-form harvest query
+```
+
+**Context Debt Dashboard**
+
+`Cmd+Shift+P → Membrane: Open Context Debt Dashboard` opens a WebView with:
+- Color-coded bar chart (red ≥ 70, orange ≥ 40, green < 40) per module
+- Trend arrows (↑ rising, ↓ falling, → stable)
+- Summary cards: total modules, critical count, average debt
+- Architectural coupling grid (last 30 days)
+
+**Skill Gate Diagnostics**
+
+Skill gates run automatically on file save — violations appear as red squiggles in the Problems panel alongside normal TypeScript/Python errors. `Cmd+Shift+P → Membrane: Run Skill Gates on Changed Files` runs gates across all git-modified files at once.
+
+**Sidebar Tree Views**
+
+Seven live tree views in the Membrane activity bar panel:
+
+| View | What it shows |
+|------|---------------|
+| Symbol Explorer | Classes, functions, modules from the index |
+| Context Debt | Modules ranked by debt score (CRITICAL / HIGH / normal) |
+| Skill Gates | Pass/fail per gate with blast radius in tooltip |
+| Agent Locks | Active file locks per agent ID |
+| Failure Patterns | Grouped by severity (High / Medium / Low) |
+| Trust Scores | Files at T4–T5 (low trust) surfaced for review |
+| Playbook Proposals | Auto-proposed `skills.yml` entries from evidence bundles |
+
+**Status Bar**
+
+Two persistent status bar items (bottom bar):
+- `$(shield) Membrane: ready` — extension state with click-to-recover quick pick
+- `$(lock) N conflicts` — live agent conflict count (polls every 30 s), hidden when 0
+
+**Setup Wizard**
+
+First run opens an interactive wizard that detects uv, installs contextpack, initializes the workspace index, and configures `.mcp.json` — no terminal required.
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `membrane.embeddingProvider` | `hash` | `hash` (local, no API key), `openai`, `azure_foundry` |
+| `membrane.llmProvider` | `` | Optional LLM for ask/harvest: `openai` or `azure_foundry` |
+| `membrane.openaiApiKey` | `` | OpenAI API key |
+| `membrane.azureEndpoint` | `` | Azure OpenAI endpoint URL |
+| `membrane.azureDeployment` | `` | Azure chat deployment name |
+| `membrane.azureEmbeddingDeployment` | `` | Azure embedding deployment name |
+| `membrane.autoWatch` | `true` | Auto-watch files and trigger incremental builds |
+| `membrane.autoMcpConfigure` | `true` | Auto-write `.mcp.json` on activation |
+| `membrane.maxEmbedEntities` | `2000` | Cap on embedded entities (rest stored-only) |
+
+### Extension Architecture
+
+```
+membrane-vscode/
+├── src/
+│   ├── extension.ts           ← activation lifecycle (uv → install → verify → wire)
+│   ├── chatParticipant.ts     ← @membrane chat routing
+│   ├── statusBar.ts           ← two-item status bar + conflict polling
+│   ├── diagnostics/
+│   │   └── skillGateDiagnostics.ts  ← Problems panel integration
+│   ├── panels/
+│   │   ├── GraphPanel.ts      ← vis.js dependency graph WebView
+│   │   ├── DebtDashboard.ts   ← context debt bar chart WebView
+│   │   ├── HarvestPanel.ts    ← free-form harvest query WebView
+│   │   └── WizardPanel.ts     ← first-run setup wizard WebView
+│   ├── providers/             ← 7 TreeDataProviders (sidebar views)
+│   ├── commands/              ← build, harvest, skill, governance, setup
+│   ├── python/                ← uv detector, installer, runner (subprocess)
+│   ├── build/                 ← BuildService (incremental + full build)
+│   ├── mcp/                   ← McpServerManager (stdio MCP process)
+│   └── watcher/               ← FileWatcherManager (glob → incremental build)
+└── webview-src/
+    ├── graph/index.html        ← vis.js graph (full inline JS, CSP nonce)
+    ├── harvest/                ← harvest query UI
+    └── wizard/                 ← setup wizard UI
+```
 
 ---
 
@@ -138,6 +250,7 @@ context patterns ./my-repo
 | `context patterns`        | Recurring skill failure patterns with proactive hints *(Phase 9)*      |
 | `context coupling`        | Architectural coupling trend (last 30 days) *(Phase 9)*                |
 | `context snapshots`       | List / diff semantic state snapshots *(Phase 9)*                       |
+| `context graphify`        | Export self-contained vis.js dependency graph HTML *(Extension)*       |
 
 
 ---
@@ -438,6 +551,7 @@ mypy contextpack
 | 7     | Done   | Semantic Contract Layer — AST extraction, registry, invariant guard, intent preserver, anti-patterns  |
 | 8     | Done   | Context Governance & Trust — 5-tier scoring, debt tracker, provenance chains, agent lock table        |
 | 9     | Done   | Adaptive Intelligence — failure pattern memory, coupling monitor, context snapshots, playbook learner |
+| VS Code | Done | Membrane extension — graph panel, @membrane chat, debt dashboard, skill diagnostics, sidebar views   |
 
 
 ---
