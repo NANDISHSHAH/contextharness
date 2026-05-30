@@ -78,6 +78,7 @@ export const COMMANDS = {
   showStatus: 'membrane.showStatus',
   harvestPanel: 'membrane.harvestPanel',
   runSkillGatesAll: 'membrane.runSkillGatesAll',
+  debtDashboard: 'membrane.debtDashboard',
 };
 
 // View IDs

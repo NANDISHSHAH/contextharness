@@ -252,6 +252,20 @@
         "title": "Run Skill Gates on Changed Files",
         "category": "Membrane",
         "icon": "$(shield)"
+      },
+      {
+        "command": "membrane.debtDashboard",
+        "title": "Open Context Debt Dashboard",
+        "category": "Membrane",
+        "icon": "$(graph)"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "membrane",
+        "name": "membrane",
+        "description": "Ask about context debt, agent conflicts, failure patterns, and codebase intelligence",
+        "isSticky": false
       }
     ],
     "configuration": {

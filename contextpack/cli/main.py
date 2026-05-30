@@ -225,6 +225,152 @@ def graph(
     console.print(msg)
 
 
+@app.command("graphify")
+def graphify(
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    output: str = typer.Option(".membrane/graph.html", "--output", "-o", help="Output HTML path"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Also write graph.json"),  # noqa: B008
+) -> None:
+    """Generate an interactive vis.js dependency graph HTML file."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    path = path or _Path.cwd()
+    project = Project(path)
+
+    if not project.context_dir.exists():
+        console.print("[red]✗[/red] No index found. Run [bold]context build[/bold] first.")
+        raise typer.Exit(1)
+
+    out_path = _Path(output) if not _Path(output).is_absolute() else _Path(output)
+    if not out_path.is_absolute():
+        out_path = path / out_path
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Build graph data from project
+    try:
+        summary = project.graph_summary() if hasattr(project, "graph_summary") else {}
+        entities = getattr(project, "entities", []) or []
+        files = getattr(project, "files", []) or []
+
+        # Try richer graph data from index
+        graph_data = {"nodes": [], "edges": []}
+        try:
+            from contextpack.core.project import Project as _P
+            p = _P(path)
+            if hasattr(p, "get_graph_data"):
+                graph_data = p.get_graph_data()
+        except Exception:
+            pass
+
+        # Fall back to building from outline
+        if not graph_data["nodes"]:
+            seen_ids: set = set()
+            conn_count: dict = {}
+
+            for e in entities:
+                eid = str(getattr(e, "id", None) or getattr(e, "name", ""))
+                deps = list(getattr(e, "deps", []) or getattr(e, "imports", []) or [])
+                for dep in deps:
+                    conn_count[eid] = conn_count.get(eid, 0) + 1
+                    conn_count[dep] = conn_count.get(dep, 0) + 1
+                    graph_data["edges"].append({"from": eid, "to": dep})
+
+            for f in files:
+                fid = str(getattr(f, "path", f) if not isinstance(f, str) else f)
+                if fid not in seen_ids:
+                    seen_ids.add(fid)
+                    c = conn_count.get(fid, 0)
+                    graph_data["nodes"].append({
+                        "id": fid, "label": _Path(fid).name,
+                        "isHub": c >= 5, "type": "file", "filePath": fid, "connections": c,
+                    })
+
+            for e in entities:
+                eid = str(getattr(e, "id", None) or getattr(e, "name", ""))
+                if eid and eid not in seen_ids:
+                    seen_ids.add(eid)
+                    c = conn_count.get(eid, 0)
+                    graph_data["nodes"].append({
+                        "id": eid,
+                        "label": str(getattr(e, "name", eid)),
+                        "isHub": c >= 5,
+                        "type": str(getattr(e, "type", "function")),
+                        "filePath": str(getattr(e, "file_path", "")),
+                        "connections": c,
+                    })
+
+    except Exception as exc:
+        console.print(f"[yellow]Warning: could not extract full graph — {exc}[/yellow]")
+        graph_data = {"nodes": [], "edges": []}
+
+    graph_json = _json.dumps(graph_data)
+
+    # Write JSON if requested
+    if json_output:
+        json_path = out_path.with_suffix(".json")
+        json_path.write_text(graph_json, encoding="utf-8")
+        console.print(f"[green]✓[/green] graph.json → {json_path}")
+
+    # Write self-contained vis.js HTML
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Membrane — Dependency Graph</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{background:#0d0d0d;color:#c8c8c8;font-family:'JetBrains Mono',monospace;height:100vh;overflow:hidden}}
+#graph{{width:100%;height:100vh}}
+#info{{position:fixed;top:10px;right:10px;background:#141414;border:1px solid #2a2a2a;padding:12px 16px;font-size:11px;max-width:260px;display:none}}
+#info h3{{font-size:12px;color:#e8e8e8;margin-bottom:8px}}
+.k{{color:#666;font-size:9px;letter-spacing:.1em;text-transform:uppercase}}
+.v{{color:#c8c8c8;word-break:break-all}}
+#legend{{position:fixed;bottom:16px;left:16px;background:#141414;border:1px solid #2a2a2a;padding:10px 14px;font-size:10px}}
+.ld{{display:flex;align-items:center;gap:8px;margin-bottom:4px}}
+.lc{{width:10px;height:10px;border-radius:50%;flex-shrink:0}}
+</style>
+</head>
+<body>
+<div id="graph"></div>
+<div id="info"><h3 id="i-name"></h3><div class="k">Type</div><div class="v" id="i-type"></div><br><div class="k">File</div><div class="v" id="i-file"></div><br><div class="k">Connections</div><div class="v" id="i-conns"></div></div>
+<div id="legend">
+  <div class="ld"><div class="lc" style="background:#e74c3c"></div>Hub node</div>
+  <div class="ld"><div class="lc" style="background:#007acc"></div>File / Module</div>
+  <div class="ld"><div class="lc" style="background:#2ecc71"></div>Function / Class</div>
+</div>
+<script>
+const data={graph_json};
+const nodes=new vis.DataSet(data.nodes.map(n=>{{
+  const hub=n.isHub,c=n.connections||1;
+  const t=(n.type||'').toLowerCase();
+  const col=hub?'#e74c3c':t.match(/module|file/)?'#007acc':t.match(/class|function|method/)?'#2ecc71':'#3498db';
+  return{{id:n.id,label:n.label,color:{{background:col,border:col,highlight:{{background:'#fff',border:col}}}},size:hub?Math.min(60,20+c*2):Math.min(40,14+c*1.2),font:{{color:'#e8e8e8',size:11}},_raw:n}};
+}}));
+const edges=new vis.DataSet(data.edges.map((e,i)=>{{return{{id:i,from:e.from||e.source,to:e.to||e.target,arrows:'to',color:{{color:'#333',highlight:'#007acc'}},width:1}};}}));
+const net=new vis.Network(document.getElementById('graph'),{{nodes,edges}},{{
+  physics:{{forceAtlas2Based:{{gravitationalConstant:-50,centralGravity:0.01,springLength:120,damping:0.4}},solver:'forceAtlas2Based',stabilization:{{iterations:200}}}},
+  interaction:{{hover:true,navigationButtons:false,keyboard:true}},
+}});
+net.on('click',p=>{{
+  if(p.nodes.length){{
+    const n=nodes.get(p.nodes[0]);const r=n._raw||{{}};
+    document.getElementById('i-name').textContent=n.label;
+    document.getElementById('i-type').textContent=r.type||'—';
+    document.getElementById('i-file').textContent=r.filePath||'—';
+    document.getElementById('i-conns').textContent=(r.connections||0)+' connections';
+    document.getElementById('info').style.display='block';
+  }}else{{document.getElementById('info').style.display='none';}}
+}});
+</script>
+</body>
+</html>"""
+
+    out_path.write_text(html, encoding="utf-8")
+    console.print(f"[green]✓[/green] graph → {out_path} ({len(graph_data['nodes'])} nodes, {len(graph_data['edges'])} edges)")
+
+
 harness_app = typer.Typer(help="Context Harness — workflow layer (hooks, MCP, validation)")
 app.add_typer(harness_app, name="harness")
 

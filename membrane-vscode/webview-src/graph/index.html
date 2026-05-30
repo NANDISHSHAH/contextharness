@@ -1,120 +1,792 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Membrane — Dependency Graph</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-NONCE' https://unpkg.com; style-src 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https://unpkg.com;" />
+  <title>Membrane — Dependency Graph</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap');
 
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        background: #1e1e1e;
-        color: #e0e0e0;
-        overflow: hidden;
-      }
+    :root {
+      --bg:        #0d0d0d;
+      --surface:   #141414;
+      --panel:     #1a1a1a;
+      --border:    #2a2a2a;
+      --border-hi: #3a3a3a;
+      --accent:    #007acc;
+      --accent-hi: #1a8fe0;
+      --red:       #e74c3c;
+      --green:     #2ecc71;
+      --text:      #c8c8c8;
+      --text-dim:  #666;
+      --text-hi:   #e8e8e8;
+      --mono:      'JetBrains Mono', 'Courier New', monospace;
+      --sidebar-w: 220px;
+      --info-w:    280px;
+    }
 
-      #graph-container {
-        width: 100%;
-        height: 100vh;
-        background: linear-gradient(135deg, #2d2d2d, #1e1e1e);
-      }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
-      .controls {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        background: rgba(0, 0, 0, 0.7);
-        padding: 12px;
-        border-radius: 6px;
-        border: 1px solid #404040;
-        z-index: 100;
-      }
+    body {
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
 
-      .control-group {
-        margin-bottom: 10px;
-      }
+    /* ── TOP BAR ── */
+    #topbar {
+      height: 36px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 16px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 10;
+    }
 
-      label {
-        display: block;
-        font-size: 12px;
-        margin-bottom: 4px;
-        color: #a0a0a0;
-      }
+    #topbar .logo {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
 
-      input,
-      select {
-        width: 100%;
-        padding: 6px 8px;
-        background: #1e1e1e;
-        border: 1px solid #404040;
-        border-radius: 4px;
-        color: #e0e0e0;
-        font-size: 12px;
-      }
+    #topbar .sep { width: 1px; height: 18px; background: var(--border); }
 
-      input:focus,
-      select:focus {
-        outline: none;
-        border-color: #1e90ff;
-        box-shadow: 0 0 4px rgba(30, 144, 255, 0.3);
-      }
+    #node-count {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+    }
 
-      .loading {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        text-align: center;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 30px;
-        border-radius: 8px;
-        border: 1px solid #404040;
-      }
+    #node-count span { color: var(--text); }
 
-      .spinner {
-        border: 3px solid #404040;
-        border-top: 3px solid #1e90ff;
-        border-radius: 50%;
-        width: 30px;
-        height: 30px;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 10px;
-      }
+    .topbar-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-    </style>
-  </head>
+    .icon-btn {
+      width: 26px;
+      height: 26px;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .icon-btn:active { background: rgba(0,122,204,0.15); }
 
-  <body>
-    <div id="graph-container"></div>
-    <div class="controls">
-      <div class="control-group">
-        <label for="search">Search Nodes</label>
-        <input type="text" id="search" placeholder="Find symbol..." />
+    /* ── MAIN AREA ── */
+    #main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: var(--sidebar-w);
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+
+    .sidebar-section {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+    }
+
+    .sidebar-label {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sidebar-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .ctrl-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 5px 8px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .ctrl-input:focus { border-color: var(--accent); }
+    .ctrl-input::placeholder { color: var(--text-dim); }
+
+    .ctrl-select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 5px 8px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      padding-right: 22px;
+    }
+    .ctrl-select:focus { border-color: var(--accent); }
+
+    .ctrl-row { margin-bottom: 8px; }
+    .ctrl-row:last-child { margin-bottom: 0; }
+
+    .zoom-row {
+      display: flex;
+      gap: 6px;
+    }
+    .zoom-row .icon-btn { flex: 1; height: 28px; font-size: 16px; }
+
+    /* Legend */
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 5px;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Stat grid */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .stat-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+    }
+    .stat-val {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-hi);
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    .stat-lbl {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* ── GRAPH CANVAS ── */
+    #graph-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 30% 20%, rgba(0,122,204,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 80%, rgba(231,76,60,0.03) 0%, transparent 60%),
+        var(--bg);
+      /* dot grid */
+      background-image:
+        radial-gradient(circle, #2a2a2a 1px, transparent 1px),
+        radial-gradient(ellipse at 30% 20%, rgba(0,122,204,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 80%, rgba(231,76,60,0.03) 0%, transparent 60%);
+      background-size: 24px 24px, 100% 100%, 100% 100%;
+    }
+
+    #graph-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── LOADING / EMPTY ── */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      pointer-events: none;
+    }
+
+    .overlay.hidden { display: none; }
+
+    .spinner-ring {
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .overlay-text {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .build-btn {
+      pointer-events: all;
+      background: none;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      padding: 8px 20px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.15s;
+      margin-top: 4px;
+    }
+    .build-btn:hover { background: var(--accent); color: #fff; }
+
+    /* ── INFO PANEL ── */
+    #info-panel {
+      width: var(--info-w);
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      flex-shrink: 0;
+      transform: translateX(100%);
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #info-panel.open { transform: translateX(0); }
+
+    .info-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .info-title {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 4px;
+      transition: color 0.15s;
+    }
+    .close-btn:hover { color: var(--text-hi); }
+
+    .info-body { padding: 12px; flex: 1; overflow-y: auto; }
+
+    .info-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-hi);
+      word-break: break-all;
+      margin-bottom: 10px;
+      line-height: 1.3;
+    }
+
+    .info-row {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 10px;
+    }
+    .info-key {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .info-val {
+      font-size: 11px;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border: 1px solid;
+      margin-top: 2px;
+    }
+    .badge-hub { color: var(--red); border-color: var(--red); }
+    .badge-mod { color: var(--accent); border-color: var(--accent); }
+    .badge-file { color: var(--green); border-color: var(--green); }
+
+    .open-file-btn {
+      width: 100%;
+      background: none;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      padding: 7px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.15s;
+      margin-top: 4px;
+    }
+    .open-file-btn:hover { background: var(--accent); color: #fff; }
+    .open-file-btn:disabled { opacity: 0.3; cursor: default; }
+    .open-file-btn:disabled:hover { background: none; color: var(--accent); }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border-hi); }
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <span class="logo">Membrane</span>
+  <div class="sep"></div>
+  <span id="node-count">GRAPH — <span id="nc">0</span> nodes · <span id="ec">0</span> edges</span>
+  <div class="topbar-right">
+    <button class="icon-btn" id="btn-fit" title="Fit to screen">⊡</button>
+    <button class="icon-btn" id="btn-refresh" title="Refresh">↻</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Search</div>
+      <div class="ctrl-row">
+        <input class="ctrl-input" id="search-input" type="text" placeholder="filter nodes…" />
       </div>
-      <div class="control-group">
-        <label for="filter">Filter</label>
-        <select id="filter">
-          <option value="all">All Nodes</option>
-          <option value="hubs">Hub Nodes Only</option>
-          <option value="modules">By Module</option>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Layout</div>
+      <div class="ctrl-row">
+        <select class="ctrl-select" id="layout-select">
+          <option value="force">Force directed</option>
+          <option value="hierarchical">Hierarchical</option>
+          <option value="circular">Circular</option>
         </select>
       </div>
     </div>
-    <div class="loading" id="loading">
-      <div class="spinner"></div>
-      <p>Loading dependency graph...</p>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Filter</div>
+      <div class="ctrl-row">
+        <select class="ctrl-select" id="filter-select">
+          <option value="all">All nodes</option>
+          <option value="hubs">Hubs only</option>
+          <option value="modules">Modules only</option>
+          <option value="functions">Functions only</option>
+        </select>
+      </div>
     </div>
 
-    <script src="cytoscape.min.js"></script>
-    <script src="../graph.js"></script>
-  </body>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Zoom</div>
+      <div class="zoom-row">
+        <button class="icon-btn" id="btn-zoom-in" title="Zoom in">+</button>
+        <button class="icon-btn" id="btn-zoom-out" title="Zoom out">−</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Legend</div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#e74c3c;box-shadow:0 0 6px #e74c3c55"></div>
+        Hub node
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#007acc"></div>
+        Module
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#2ecc71"></div>
+        Function / Class
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#f39c12"></div>
+        API / Route
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Stats</div>
+      <div class="stat-grid">
+        <div class="stat-box">
+          <div class="stat-val" id="stat-nodes">0</div>
+          <div class="stat-lbl">Nodes</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="stat-edges">0</div>
+          <div class="stat-lbl">Edges</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="stat-hubs">0</div>
+          <div class="stat-lbl">Hubs</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="stat-depth">0</div>
+          <div class="stat-lbl">Max deg.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- GRAPH -->
+  <div id="graph-wrap">
+    <div id="graph-canvas"></div>
+
+    <!-- Loading overlay -->
+    <div class="overlay" id="overlay-loading">
+      <div class="spinner-ring"></div>
+      <div class="overlay-text">Generating graph…</div>
+    </div>
+
+    <!-- Empty overlay -->
+    <div class="overlay hidden" id="overlay-empty">
+      <div class="overlay-text" style="color:var(--text-dim);font-size:12px">No graph data</div>
+      <div class="overlay-text" style="font-size:10px;margin-top:-8px">Build the index first</div>
+      <button class="build-btn" id="btn-build">▶ Build Index</button>
+    </div>
+  </div>
+
+  <!-- INFO PANEL -->
+  <div id="info-panel">
+    <div class="info-header">
+      <span class="info-title">Node Info</span>
+      <button class="close-btn" id="btn-close-info">×</button>
+    </div>
+    <div class="info-body">
+      <div class="info-name" id="info-name">—</div>
+      <div class="info-row">
+        <span class="info-key">Type</span>
+        <span class="info-val"><span id="info-badge"></span></span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">File</span>
+        <span class="info-val" id="info-file">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Connections</span>
+        <span class="info-val" id="info-conns">—</span>
+      </div>
+      <button class="open-file-btn" id="btn-open-file">Open in Editor</button>
+    </div>
+  </div>
+
+</div>
+
+<script nonce="NONCE" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script nonce="NONCE">
+(function () {
+  const vscode = acquireVsCodeApi();
+
+  /* ── state ── */
+  let network = null;
+  let allNodes = [], allEdges = [];
+  let selectedFilePath = null;
+
+  /* ── element refs ── */
+  const graphCanvas    = document.getElementById('graph-canvas');
+  const overlayLoading = document.getElementById('overlay-loading');
+  const overlayEmpty   = document.getElementById('overlay-empty');
+  const infoPanel      = document.getElementById('info-panel');
+  const searchInput    = document.getElementById('search-input');
+  const layoutSelect   = document.getElementById('layout-select');
+  const filterSelect   = document.getElementById('filter-select');
+  const ncEl           = document.getElementById('nc');
+  const ecEl           = document.getElementById('ec');
+
+  /* ── vis.js dataset wrappers ── */
+  let nodesDS, edgesDS;
+
+  /* ── color map ── */
+  function nodeColor(n) {
+    if (n.isHub) return { background: '#e74c3c', border: '#ff6b5b', highlight: { background: '#ff6b5b', border: '#fff' } };
+    const t = (n.type || '').toLowerCase();
+    if (t === 'module' || t === 'file')     return { background: '#007acc', border: '#1a8fe0', highlight: { background: '#1a8fe0', border: '#fff' } };
+    if (t === 'class' || t === 'function' || t === 'method') return { background: '#2ecc71', border: '#3de07f', highlight: { background: '#3de07f', border: '#fff' } };
+    if (t === 'api' || t === 'route')       return { background: '#f39c12', border: '#f5b942', highlight: { background: '#f5b942', border: '#fff' } };
+    return { background: '#3498db', border: '#5aafe0', highlight: { background: '#5aafe0', border: '#fff' } };
+  }
+
+  function nodeSize(n) {
+    const c = n.connections || 1;
+    if (n.isHub) return Math.min(60, 20 + c * 2);
+    return Math.min(40, 14 + c * 1.2);
+  }
+
+  function toVisNode(n) {
+    const color = nodeColor(n);
+    const size  = nodeSize(n);
+    return {
+      id: n.id,
+      label: n.label || n.id,
+      color,
+      size,
+      font: { color: '#e8e8e8', size: 11, face: 'JetBrains Mono, monospace' },
+      borderWidth: n.isHub ? 2 : 1,
+      shadow: n.isHub ? { enabled: true, color: 'rgba(231,76,60,0.4)', size: 12 } : false,
+      _raw: n,
+    };
+  }
+
+  /* ── build network ── */
+  function buildNetwork(nodes, edges) {
+    nodesDS = new vis.DataSet(nodes.map(toVisNode));
+    edgesDS = new vis.DataSet(edges.map((e, i) => ({
+      id: e.id || i,
+      from: e.from || e.source,
+      to: e.to || e.target,
+      arrows: 'to',
+      color: { color: '#3a3a3a', highlight: '#007acc', hover: '#555' },
+      width: 1,
+      smooth: { type: 'continuous' },
+    })));
+
+    const options = getNetworkOptions();
+
+    if (network) {
+      network.destroy();
+    }
+
+    network = new vis.Network(graphCanvas, { nodes: nodesDS, edges: edgesDS }, options);
+
+    network.on('click', (params) => {
+      if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0];
+        const node = nodesDS.get(nodeId);
+        if (node) showInfo(node);
+      } else {
+        closeInfo();
+      }
+    });
+
+    network.on('stabilized', () => {
+      overlayLoading.classList.add('hidden');
+    });
+
+    // Update stats
+    updateStats(nodes, edges);
+  }
+
+  function getNetworkOptions() {
+    const layout = layoutSelect.value;
+    const base = {
+      interaction: { hover: true, tooltipDelay: 200, navigationButtons: false, keyboard: true },
+      edges: { smooth: { type: 'continuous' } },
+      nodes: { shape: 'dot' },
+      physics: { stabilization: { iterations: 150 } },
+    };
+
+    if (layout === 'hierarchical') {
+      return { ...base,
+        layout: { hierarchical: { direction: 'UD', sortMethod: 'directed', levelSeparation: 120, nodeSpacing: 140 } },
+        physics: { enabled: false },
+      };
+    }
+    if (layout === 'circular') {
+      return { ...base,
+        layout: { improvedLayout: false },
+        physics: {
+          solver: 'repulsion',
+          repulsion: { nodeDistance: 200 },
+          stabilization: { iterations: 100 },
+        },
+      };
+    }
+    // force (default)
+    return { ...base,
+      physics: {
+        forceAtlas2Based: { gravitationalConstant: -50, centralGravity: 0.01, springLength: 120, damping: 0.4 },
+        solver: 'forceAtlas2Based',
+        stabilization: { iterations: 200 },
+      },
+    };
+  }
+
+  /* ── info panel ── */
+  function showInfo(node) {
+    const raw = node._raw || {};
+    selectedFilePath = raw.filePath || null;
+
+    document.getElementById('info-name').textContent = node.label;
+
+    const badge = document.getElementById('info-badge');
+    const type = (raw.type || 'unknown').toLowerCase();
+    badge.className = 'badge ' + (raw.isHub ? 'badge-hub' : type === 'module' || type === 'file' ? 'badge-mod' : 'badge-file');
+    badge.textContent = raw.isHub ? 'HUB · ' + type : type;
+
+    document.getElementById('info-file').textContent = raw.filePath || '—';
+    document.getElementById('info-conns').textContent = (raw.connections || '?') + ' connections';
+
+    const openBtn = document.getElementById('btn-open-file');
+    openBtn.disabled = !selectedFilePath;
+
+    infoPanel.classList.add('open');
+
+    vscode.postMessage({ type: 'nodeSelected', nodeId: node.id, filePath: selectedFilePath });
+  }
+
+  function closeInfo() {
+    infoPanel.classList.remove('open');
+    selectedFilePath = null;
+  }
+
+  /* ── stats ── */
+  function updateStats(nodes, edges) {
+    const hubs = nodes.filter(n => n.isHub).length;
+    const maxDeg = nodes.reduce((m, n) => Math.max(m, n.connections || 0), 0);
+    document.getElementById('stat-nodes').textContent = nodes.length;
+    document.getElementById('stat-edges').textContent = edges.length;
+    document.getElementById('stat-hubs').textContent  = hubs;
+    document.getElementById('stat-depth').textContent = maxDeg;
+    ncEl.textContent = nodes.length;
+    ecEl.textContent = edges.length;
+  }
+
+  /* ── search ── */
+  function applySearch(query) {
+    if (!nodesDS) return;
+    const q = query.trim().toLowerCase();
+    nodesDS.forEach(n => {
+      const match = !q || n.label.toLowerCase().includes(q);
+      nodesDS.update({ id: n.id, opacity: match ? 1 : 0.15, font: { color: match ? '#e8e8e8' : '#333' } });
+    });
+  }
+
+  /* ── filter ── */
+  function applyFilter(filterVal) {
+    if (!allNodes.length || !nodesDS) return;
+    let visible;
+    if (filterVal === 'hubs') visible = allNodes.filter(n => n.isHub);
+    else if (filterVal === 'modules') visible = allNodes.filter(n => (n.type || '').match(/module|file/i));
+    else if (filterVal === 'functions') visible = allNodes.filter(n => (n.type || '').match(/function|method|class/i));
+    else visible = allNodes;
+
+    const visIds = new Set(visible.map(n => n.id));
+    nodesDS.forEach(n => {
+      const show = visIds.has(n.id);
+      nodesDS.update({ id: n.id, hidden: !show });
+    });
+    edgesDS.forEach(e => {
+      edgesDS.update({ id: e.id, hidden: !visIds.has(e.from) || !visIds.has(e.to) });
+    });
+  }
+
+  /* ── message handler ── */
+  window.addEventListener('message', (event) => {
+    const msg = event.data;
+    if (msg.type === 'graphData') {
+      const nodes = msg.nodes || [];
+      const edges = msg.edges || [];
+      allNodes = nodes;
+      allEdges = edges;
+
+      overlayLoading.classList.remove('hidden');
+      overlayEmpty.classList.add('hidden');
+
+      if (nodes.length === 0) {
+        overlayLoading.classList.add('hidden');
+        overlayEmpty.classList.remove('hidden');
+        return;
+      }
+      buildNetwork(nodes, edges);
+    }
+  });
+
+  /* ── controls ── */
+  document.getElementById('btn-fit').addEventListener('click', () => network?.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } }));
+  document.getElementById('btn-refresh').addEventListener('click', () => vscode.postMessage({ type: 'requestGraphData' }));
+  document.getElementById('btn-close-info').addEventListener('click', closeInfo);
+  document.getElementById('btn-build').addEventListener('click', () => vscode.postMessage({ type: 'buildIndex' }));
+  document.getElementById('btn-open-file').addEventListener('click', () => {
+    if (selectedFilePath) vscode.postMessage({ type: 'nodeSelected', nodeId: null, filePath: selectedFilePath });
+  });
+
+  searchInput.addEventListener('input', (e) => applySearch(e.target.value));
+  filterSelect.addEventListener('change', (e) => applyFilter(e.target.value));
+  layoutSelect.addEventListener('change', () => {
+    if (allNodes.length) buildNetwork(allNodes, allEdges);
+  });
+
+  document.getElementById('btn-zoom-in').addEventListener('click', () => {
+    if (!network) return;
+    const s = network.getScale();
+    network.moveTo({ scale: s * 1.3, animation: { duration: 200 } });
+  });
+  document.getElementById('btn-zoom-out').addEventListener('click', () => {
+    if (!network) return;
+    const s = network.getScale();
+    network.moveTo({ scale: s * 0.75, animation: { duration: 200 } });
+  });
+
+  /* ── init ── */
+  vscode.postMessage({ type: 'requestGraphData' });
+})();
+</script>
+</body>
 </html>

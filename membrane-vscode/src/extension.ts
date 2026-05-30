@@ -26,6 +26,8 @@ import { SkillGateDiagnosticProvider } from './diagnostics/skillGateDiagnostics'
 import { WizardPanel } from './panels/WizardPanel';
 import { GraphPanel } from './panels/GraphPanel';
 import { HarvestPanel } from './panels/HarvestPanel';
+import { DebtDashboard } from './panels/DebtDashboard';
+import { registerChatParticipant } from './chatParticipant';
 
 let buildService: BuildService | null = null;
 let fileWatcher: FileWatcherManager | null = null;
@@ -193,7 +195,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('membrane.refreshPlaybook',       () => playbook?.refresh()),
   );
 
-  // Graph and Harvest panel commands
+  // Graph, Harvest, and Debt panel commands
   context.subscriptions.push(
     vscode.commands.registerCommand(COMMANDS.graphView, () =>
       GraphPanel.show(context, runner),
@@ -201,7 +203,13 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('membrane.harvestPanel', () =>
       HarvestPanel.show(context, runner),
     ),
+    vscode.commands.registerCommand('membrane.debtDashboard', () =>
+      DebtDashboard.show(runner),
+    ),
   );
+
+  // Phase 3: @membrane chat participant
+  registerChatParticipant(context, runner);
 
   // Step 9: Skill gate diagnostics
   diagnostics = new SkillGateDiagnosticProvider(runner);
