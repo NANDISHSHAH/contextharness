@@ -19,20 +19,20 @@ export class AgentLocksProvider implements vscode.TreeDataProvider<vscode.TreeIt
   getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
     if (!element) {
       if (this.data.length === 0) {
-        return Promise.resolve([
-          new vscode.TreeItem('No active agent locks'),
-        ]);
+        const item = new vscode.TreeItem('No active agent locks', vscode.TreeItemCollapsibleState.None);
+        item.iconPath = new vscode.ThemeIcon('unlock');
+        return Promise.resolve([item]);
       }
 
       return Promise.resolve(
         this.data.map((item) => {
-          const item_obj = new vscode.TreeItem(
-            `${item.agent_id || 'Unknown'} - ${item.files?.length || 0} files`,
-            vscode.TreeItemCollapsibleState.None,
-          );
-          item_obj.tooltip = `Acquired: ${item.acquired_at || 'Unknown'}`;
-          item_obj.iconPath = new vscode.ThemeIcon('lock');
-          return item_obj;
+          const fileCount = item.files?.length ?? 1;
+          const label = `${item.agent_id || 'Unknown agent'} — ${fileCount} file${fileCount > 1 ? 's' : ''}`;
+          const treeItem = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+          treeItem.tooltip = `Acquired: ${item.acquired_at || 'Unknown'}\nTTL: ${item.ttl_seconds ? `${item.ttl_seconds}s` : 'N/A'}`;
+          treeItem.iconPath = new vscode.ThemeIcon('lock');
+          treeItem.description = item.acquired_at ? `${item.acquired_at}` : undefined;
+          return treeItem;
         }),
       );
     }

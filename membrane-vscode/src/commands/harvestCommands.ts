@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ContextRunner } from '../python/runner';
 import { COMMANDS } from '../constants';
 import { log, showOutput } from '../utils/output';
+import { HarvestPanel } from '../panels/HarvestPanel';
 
 async function showAsMarkdownDoc(content: string, title: string): Promise<void> {
   const doc = await vscode.workspace.openTextDocument({
@@ -17,40 +18,13 @@ async function showAsMarkdownDoc(content: string, title: string): Promise<void> 
 export function registerHarvestCommands(
   context: vscode.ExtensionContext,
   runner: ContextRunner,
+  extensionUri: vscode.Uri,
 ): void {
-  // membrane.harvest
+  // membrane.harvest — opens the WebView panel
   context.subscriptions.push(
-    vscode.commands.registerCommand(COMMANDS.harvest, async () => {
-      log('Command: harvest');
-
-      const query = await vscode.window.showInputBox({
-        prompt: 'Enter query for context harvesting',
-        placeHolder: 'e.g., "authentication flow"',
-      });
-
-      if (!query) {
-        return;
-      }
-
-      showOutput();
-      log(`Harvesting context for: "${query}"`);
-
-      const result = await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: `Membrane: Harvesting context for "${query}"`,
-          cancellable: false,
-        },
-        async () => runner.run(['harvest', query]),
-      );
-
-      if (result.exitCode === 0) {
-        log(result.stdout);
-        await showAsMarkdownDoc(result.stdout || '_no context returned_', `Harvest: ${query}`);
-      } else {
-        log(`Harvest failed: ${result.stderr}`);
-        vscode.window.showErrorMessage(`Membrane: Harvest failed — ${result.stderr || 'unknown error'}`);
-      }
+    vscode.commands.registerCommand(COMMANDS.harvest, () => {
+      log('Command: harvest (WebView)');
+      HarvestPanel.show(context, runner);
     }),
   );
 

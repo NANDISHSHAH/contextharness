@@ -19,20 +19,25 @@ export class FailurePatternsProvider implements vscode.TreeDataProvider<vscode.T
   getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
     if (!element) {
       if (this.data.length === 0) {
-        return Promise.resolve([
-          new vscode.TreeItem('No failure patterns detected'),
-        ]);
+        const item = new vscode.TreeItem('No failure patterns detected', vscode.TreeItemCollapsibleState.None);
+        item.iconPath = new vscode.ThemeIcon('check');
+        return Promise.resolve([item]);
       }
 
       return Promise.resolve(
         this.data.map((item) => {
-          const item_obj = new vscode.TreeItem(
-            `${item.category || 'Unknown'} (${item.count || 0}x)`,
-            vscode.TreeItemCollapsibleState.None,
-          );
-          item_obj.tooltip = `Pattern: ${item.pattern_id || 'Unknown'}\nGlob: ${item.glob || 'N/A'}`;
-          item_obj.iconPath = new vscode.ThemeIcon('alert');
-          return item_obj;
+          const freq = item.count ?? item.frequency ?? 0;
+          const severity = freq > 5 ? 'High' : freq > 1 ? 'Medium' : 'Low';
+          const icon = freq > 5 ? 'error' : freq > 1 ? 'warning' : 'info';
+          const label = `${item.category || item.pattern || 'Unknown'} (${freq}x · ${severity})`;
+          const treeItem = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+          treeItem.tooltip = [
+            `Pattern: ${item.pattern_id || item.pattern || 'Unknown'}`,
+            `Glob: ${item.glob || 'N/A'}`,
+            `Last seen: ${item.last_seen || 'N/A'}`,
+          ].join('\n');
+          treeItem.iconPath = new vscode.ThemeIcon(icon);
+          return treeItem;
         }),
       );
     }

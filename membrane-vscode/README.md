@@ -2,142 +2,201 @@
 
 **Graph-native codebase understanding, skill gates, and agent governance for your workspace.**
 
-A biological membrane stores context boundaries, controls information flow, enforces rules, filters actions, and coordinates systems. Membrane does exactly that for AI agents and your codebase.
+A biological membrane controls information flow, enforces rules, filters actions, and coordinates systems. Membrane does exactly that for AI agents and your codebase.
 
-## What is Membrane?
+> **Not another AI assistant.** Membrane governs how AI *agents* understand and safely modify your code — complementing tools like GitHub Copilot and Claude Code rather than replacing them.
 
-Membrane is a VSCode extension that brings graph-native code intelligence to your workspace. It automatically:
+---
 
-- **Scans** your entire codebase and builds a semantic graph of dependencies
-- **Embeds** key entities for AI agent understanding
-- **Governs** agent actions with skill gates and trust scoring
-- **Monitors** coupling and failure patterns across phases
-- **Coordinates** multi-agent work with context intelligence
+## How It's Different
+
+| Tool | Helps whom? | What it tracks |
+|---|---|---|
+| GitHub Copilot / Cursor | The human | Suggestions & autocomplete |
+| Microsoft AI Engineering Coach | The human | Your AI usage habits |
+| **Membrane** | **The AI agents** | **Codebase graph, agent conflicts, architectural contracts** |
+
+---
 
 ## Features
 
-### 🔍 Code Intelligence
+### Always-On Status Bar
 
-- Dependency graph visualization with hub detection
-- Symbol explorer with cross-file navigation
-- Semantic chunking for AI context
-- Multi-language support (Python, TypeScript, JavaScript)
-
-### 🛡️ Agent Governance
-
-- **Skill Gates**: Verify code changes meet requirements before execution
-- **Trust Scoring**: 5-tier trust levels for context chunks (GroundTruth → Unverified)
-- **Context Debt**: Track module staleness and technical debt
-- **Failure Patterns**: Detect and learn from agent mistakes
-
-### 📊 Adaptive Intelligence
-
-- Coupling trend monitoring over 30 days
-- Failure pattern memory with remediation hints
-- Snapshot diffing for agent task analysis
-- Playbook learning from evidence bundles
-
-### 🔗 MCP Integration
-
-Built-in MCP server for Claude Code and other agents. Get context via:
+The Membrane status bar item shows your extension state at all times:
 
 ```
-mem brane.harvest_context("Query about your code")
-membrane.find_symbol("FunctionName")
-membrane.agent_memory_recall(agent_id="...")
+⚡ Membrane: Ready     ⚠ 2 Agent Conflicts
 ```
+
+- Click the state item for quick actions: Retry Setup, View Logs, Build Index
+- Conflicts update every 30 seconds automatically
+
+### Skill Gates → VS Code Problems Panel
+
+Skill gate violations appear as **red squiggles** in your editor — just like TypeScript errors:
+
+```
+[Membrane/blast-radius] This change affects 12 files (limit: 10) (blast radius: 12)
+```
+
+- Runs automatically on every file save
+- "Run Skill Gates on Changed Files" command checks all git-modified files
+- Results appear in the Problems panel (`Ctrl+Shift+M`)
+
+### 7 Sidebar Views
+
+| View | Data source | What it shows |
+|---|---|---|
+| Symbol Explorer | Project map JSON | Files → classes/functions, click to navigate |
+| Context Debt | `context debt --json` | Module staleness scores with severity icons |
+| Skill Gates | `context skills history --json` | Pass/fail audit log with blast radius |
+| Agent Locks | `context locks --json` | Which agents hold locks on which files |
+| Failure Patterns | `context patterns --json` | Recurring bugs grouped by severity |
+| Trust Scores | `context trust --json` | Per-file trust tier (T1–T5) |
+| Playbook Proposals | `context playbook --json` | AI-suggested governance rule additions |
+
+All views show a clickable **▶ Build Index** prompt when no data exists — no dead placeholder text.
+
+### Dependency Graph (powered by graphify)
+
+`Membrane: View Dependency Graph` generates an interactive vis.js graph of your codebase:
+- Nodes sized by connection count (hub detection)
+- Color-coded by community cluster
+- Hover for symbol details, click to navigate
+- Falls back to Cytoscape.js view if graphify isn't installed
+
+### Harvest Context (WebView)
+
+`Membrane: Harvest Context` opens a dedicated panel:
+- Query input + optional branch selector
+- Results displayed in the panel with Copy / Open in Editor buttons
+- Powered by multi-source context aggregation (code + guidelines + tests + Jira)
+
+### Setup Wizard
+
+First-time users get a guided 6-step setup wizard:
+1. Verify Python environment (uv)
+2. Install contextpack
+3. Initialize workspace
+4. Build index
+5. Configure MCP server
+6. Done
+
+### Failure Pattern Warnings
+
+Opening a file that has known failure patterns shows an immediate warning:
+> `Membrane: 3 known failure pattern(s) in this file` → Review Patterns | Dismiss
+
+### MCP Server for Claude Code
+
+Built-in MCP server with 15 tools for Claude Code and other agents:
+
+```
+@membrane harvest_context("authentication flow")
+@membrane find_symbol("UserService")
+@membrane run_skill_gate(files=["src/auth.ts"])
+@membrane check_agent_conflicts()
+```
+
+Add to `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "context-harness": {
+      "command": "uv",
+      "args": ["run", "--extra", "harness", "context-harness-mcp"],
+      "env": { "CONTEXTPACK_ROOT": "${workspaceFolder}" }
+    }
+  }
+}
+```
+
+---
 
 ## Getting Started
 
-1. **Install** from VSCode Marketplace
-2. **Open a folder** with Python/TypeScript code
-3. **Click "Build Membrane Index"** — the extension handles the rest:
-   - Initializes `.contextpack/` directory
-   - Scans and parses your codebase
-   - Builds the dependency graph
-   - Configures MCP server for Claude Code
+**Requirements**: [uv](https://docs.astral.sh/uv/installation/) (Python runtime manager)
+
+1. Install Membrane from the VS Code Marketplace
+2. Open a project folder
+3. The setup wizard opens automatically on first run
+4. Click **Build Index** — the extension indexes your codebase and configures everything
+
+---
 
 ## Commands
 
 | Command | Shortcut | Description |
-|---------|----------|-------------|
-| Build Membrane Index | `Ctrl+Shift+M B` | Full index build |
-| Harvest Context | `Ctrl+Shift+M H` | Query codebase intelligence |
-| View Dependency Graph | `Ctrl+Shift+M G` | Interactive graph visualization |
-| Get Skill Plan | Right-click file | Check skill gates for file |
-| Show Context Debt | `Ctrl+Shift+M D` | View module staleness |
+|---|---|---|
+| Build Membrane Index | `Ctrl+Shift+M B` | Full codebase index |
+| Harvest Context | `Ctrl+Shift+M H` | Open harvest WebView |
+| View Dependency Graph | `Ctrl+Shift+M G` | Interactive graph (graphify) |
+| Run Skill Gates on Changed Files | — | Check git-modified files → Problems panel |
+| Show Membrane Status | Click status bar | Recovery QuickPick |
+| Get Skill Plan | Right-click file | Skill gate plan for this file |
+| Show Context Debt | — | Module staleness report |
+| Show Agent Locks | — | Active multi-agent locks |
+| Show Failure Patterns | — | Learned failure patterns |
+
+---
 
 ## Settings
 
 Configure in **Preferences → Extensions → Membrane**:
 
-- **Embedding Provider**: `hash` (local), `openai`, or `azure_foundry`
-- **LLM Provider**: For `ask` and `harvest` with LLM synthesis
-- **Auto Watch**: Trigger incremental builds on file save
-- **Auto MCP**: Automatically configure `.mcp.json`
+| Setting | Default | Description |
+|---|---|---|
+| `membrane.embeddingProvider` | `hash` | `hash` (local), `openai`, `azure_foundry` |
+| `membrane.llmProvider` | — | For AI-powered harvest and ask commands |
+| `membrane.autoWatch` | `true` | Incremental rebuild on file save |
+| `membrane.autoMcpConfigure` | `true` | Auto-write `.mcp.json` |
+| `membrane.openaiApiKey` | — | OpenAI API key (stored securely) |
+| `membrane.azureEndpoint` | — | Azure OpenAI endpoint |
+| `membrane.jiraBaseUrl` | — | Jira instance URL for ticket-linked context |
+
+---
 
 ## Architecture
 
 ```
-Membrane (VSCode Extension)
-├── Python Backend (contextpack)
-│   ├── Repository Scanner (languages, entities)
-│   ├── Semantic Graph (dependencies, hubs)
-│   ├── Vector Store (embeddings)
-│   └── SQLite Storage (memory.db)
-├── Skills System (policy gates, verification)
-├── Governance (trust, debt, locks)
-├── Adaptive (patterns, coupling, playbooks)
-└── MCP Server (15+ tools for agents)
+VS Code Extension                    Python Backend
+─────────────────                    ──────────────
+StatusBarManager ──────────────────► context debt/locks
+7 Tree Providers ──────────────────► context [cmd] --json
+SkillGateDiagnostics ──────────────► context skills run --files
+WizardPanel ───────────────────────► context init/build/harness
+GraphPanel ─────────────────────────► context graphify
+HarvestPanel ──────────────────────► context harvest
+                                     │
+                                     ▼
+                                 MCP Server
+                              (context-harness-mcp)
+                                     │
+                                     ▼
+                             Claude Code / Agents
 ```
 
-## FAQ
-
-### Does Membrane require Python?
-
-No — Python and all dependencies are bundled in the VSIX. Zero prerequisites. Just install and use.
-
-### Can it handle large codebases?
-
-Yes. Membrane uses a tiered embedding strategy:
-- **Hub nodes** (high-degree dependencies): Always embedded
-- **Remaining entities**: Embedded up to configurable limit (default 2000)
-- **Rest**: Stored-only (searchable but not embedded)
-
-### How do I use it with Claude Code?
-
-After building the index, the MCP server starts automatically. In Claude Code, run:
-
-```
-@membrane harvest "How does authentication work?"
-```
-
-The MCP tools (`harvest_context`, `find_symbol`, `agent_memory_recall`) are available in your agent context.
-
-### What happens to my code?
-
-Your code stays local. All processing is in `.contextpack/` (SQLite + embeddings). No data leaves your machine unless you configure an LLM provider.
-
-## Troubleshooting
-
-**"uv not found"**  
-→ Bundled uv is included. If it fails, manually install: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-
-**"Build times out"**  
-→ Large repos may take a while (first build). Watch the output channel for progress.
-
-**"MCP server won't start"**  
-→ Check that `.mcp.json` is valid JSON and `CONTEXTPACK_ROOT` is set. Run `Membrane: Configure MCP Server`.
-
-## Contributing
-
-Found a bug or have a feature request? Open an issue on [GitHub](https://github.com/NANDISHSHAH/contextharness).
-
-## License
-
-MIT — See LICENSE in the repository.
+The Python backend (contextpack) implements Phases 1–9: graph building, context harvesting, skill gates, semantic contracts, agent trust scoring, failure pattern learning, and coupling trend monitoring.
 
 ---
 
-**Made by [Nandish Shah](https://github.com/NANDISHSHAH)**  
-*Bringing context intelligence to your agents.*
+## Requirements
+
+- VS Code 1.85.0+
+- [uv](https://docs.astral.sh/uv/installation/) — automatically detects and uses the bundled binary
+- Internet connection for first install (downloads contextpack from PyPI)
+- Optional: OpenAI or Azure OpenAI API key for LLM-powered features
+
+---
+
+## Contributing
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for architecture details, development setup, and the manual testing checklist.
+
+Issues and PRs: [github.com/NANDISHSHAH/contextharness](https://github.com/NANDISHSHAH/contextharness)
+
+---
+
+## License
+
+MIT — © 2026 Nandish Shah

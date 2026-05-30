@@ -75,6 +75,9 @@ export const COMMANDS = {
   playbookShow: 'membrane.playbookShow',
   refreshTrustScores: 'membrane.refreshTrustScores',
   refreshPlaybook: 'membrane.refreshPlaybook',
+  showStatus: 'membrane.showStatus',
+  harvestPanel: 'membrane.harvestPanel',
+  runSkillGatesAll: 'membrane.runSkillGatesAll',
 };
 
 // View IDs

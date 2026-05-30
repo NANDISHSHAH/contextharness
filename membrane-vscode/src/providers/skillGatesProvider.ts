@@ -19,19 +19,20 @@ export class SkillGatesProvider implements vscode.TreeDataProvider<vscode.TreeIt
   getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
     if (!element) {
       if (this.data.length === 0) {
-        return Promise.resolve([
-          new vscode.TreeItem('No skill gate results yet'),
-        ]);
+        const item = new vscode.TreeItem('▶ Build Index to run skill gates', vscode.TreeItemCollapsibleState.None);
+        item.command = { command: 'membrane.build', title: 'Build Index' };
+        item.iconPath = new vscode.ThemeIcon('play');
+        return Promise.resolve([item]);
       }
 
       return Promise.resolve(
         this.data.map((item) => {
-          const item_obj = new vscode.TreeItem(
-            `${item.action_id || 'Unknown'} - ${item.passed ? '✓ Passed' : '✗ Failed'}`,
-            vscode.TreeItemCollapsibleState.Collapsed,
-          );
-          item_obj.tooltip = `Agent: ${item.agent_id || 'Unknown'}`;
-          return item_obj;
+          const passed = item.passed ?? (item.status === 'pass');
+          const label = `${item.action_id || item.skill || 'Unknown'} — ${passed ? '✓ Passed' : '✗ Failed'}`;
+          const treeItem = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+          treeItem.tooltip = `Agent: ${item.agent_id || 'Unknown'}\nBlast radius: ${item.blast_radius ?? 'N/A'}`;
+          treeItem.iconPath = new vscode.ThemeIcon(passed ? 'pass' : 'error');
+          return treeItem;
         }),
       );
     }
