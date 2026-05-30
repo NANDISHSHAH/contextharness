@@ -1,60 +1,102 @@
 # Membrane VSCode Extension — Development Guide
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    VS Code Extension Host                        │
+│                                                                 │
+│  ┌─────────────┐  ┌──────────────────────────────────────────┐  │
+│  │ StatusBar   │  │            extension.ts                  │  │
+│  │ Manager     │  │  activate() → uv → install → runner →   │  │
+│  │ (state +    │  │  providers → commands → diagnostics →    │  │
+│  │  conflicts) │  │  wizard (first-run)                      │  │
+│  └─────────────┘  └──────────────────────────────────────────┘  │
+│                                                                 │
+│  ┌── 7 Tree View Providers ──────────────────────────────────┐  │
+│  │  symbolExplorer  contextDebt   skillGates   agentLocks    │  │
+│  │  failurePatterns  trustScores  playbook                   │  │
+│  │  (all call runner.runJson([cmd, '--json']))                │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  ┌── 3 WebView Panels ────┐  ┌── Diagnostics ───────────────┐  │
+│  │  WizardPanel           │  │  SkillGateDiagnosticProvider │  │
+│  │  GraphPanel (graphify) │  │  → Problems panel red squig. │  │
+│  │  HarvestPanel          │  │  → onDidSaveTextDocument     │  │
+│  └────────────────────────┘  └──────────────────────────────┘  │
+│                                                                 │
+│  ┌── ContextRunner ───────────────────────────────────────────┐  │
+│  │  spawn: ~/.membrane/venv/bin/python -m contextpack.cli.main│  │
+│  │  fallback: uv run --extra harness context                  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │ subprocess
+┌────────────────────────────────▼────────────────────────────────┐
+│               Python contextpack backend                        │
+│  contextpack/cli/main.py → Phases 1-9:                         │
+│  build · harvest · ask · debt · locks · patterns · coupling    │
+│  trust · playbook · contracts · graphify · harness             │
+│                                                                 │
+│  MCP Server (context-harness-mcp) ← Claude Code reads .mcp.json│
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ## Project Structure
 
 ```
 membrane-vscode/
-├── src/                          TypeScript source code
-│   ├── extension.ts              Extension activation/deactivation entry point
+├── src/
+│   ├── extension.ts              Entry point — fault-tolerant lifecycle with status bar
 │   ├── constants.ts              Brand strings, command IDs, settings keys
+│   ├── statusBar.ts              StatusBarManager (state + conflict counter)
 │   ├── python/
-│   │   ├── detector.ts           uv executable detection + platform handling
-│   │   ├── installer.ts          contextpack wheel installation into ~/.membrane/venv/
-│   │   └── runner.ts             ContextRunner class for executing context CLI
+│   │   ├── detector.ts           uv detection + venv path resolution
+│   │   ├── installer.ts          contextpack install (local → wheel → PyPI) + rollback
+│   │   └── runner.ts             ContextRunner — spawn Python CLI, parse JSON
 │   ├── mcp/
 │   │   ├── manager.ts            MCP server subprocess lifecycle
-│   │   └── mcpConfig.ts          .mcp.json reading/writing
+│   │   └── mcpConfig.ts          .mcp.json read/write
 │   ├── build/
 │   │   ├── buildService.ts       Full/incremental build orchestration
-│   │   └── statusBar.ts          3 status bar items (build, staleness, agents)
+│   │   └── statusBar.ts          Build-specific 3-item status bar
 │   ├── watcher/
 │   │   └── fileWatcher.ts        Debounced file system watcher
+│   ├── diagnostics/
+│   │   └── skillGateDiagnostics.ts  Skill gate failures → VS Code Problems panel
+│   ├── panels/
+│   │   ├── WizardPanel.ts        Setup wizard WebView controller
+│   │   ├── GraphPanel.ts         Dependency graph (graphify or Cytoscape fallback)
+│   │   └── HarvestPanel.ts       Context harvest WebView controller
 │   ├── providers/
-│   │   ├── symbolExplorerProvider.ts
-│   │   ├── contextDebtProvider.ts
-│   │   ├── skillGatesProvider.ts
-│   │   ├── agentLocksProvider.ts
-│   │   └── failurePatternsProvider.ts
+│   │   ├── symbolExplorerProvider.ts   File → symbols tree (from project map JSON)
+│   │   ├── contextDebtProvider.ts      context debt --json
+│   │   ├── skillGatesProvider.ts       context skills history --json
+│   │   ├── agentLocksProvider.ts       context locks --json
+│   │   ├── failurePatternsProvider.ts  context patterns --json
+│   │   ├── trustScoresProvider.ts      context trust --json  ✅ complete
+│   │   └── playbookProvider.ts         context playbook --json  ✅ complete
 │   ├── commands/
-│   │   ├── buildCommands.ts
-│   │   ├── harvestCommands.ts
-│   │   ├── skillCommands.ts
-│   │   ├── governanceCommands.ts
-│   │   └── setupCommands.ts
+│   │   ├── buildCommands.ts      build, incrementalBuild, watch
+│   │   ├── harvestCommands.ts    harvest (→ HarvestPanel), ask
+│   │   ├── skillCommands.ts      skillsPlan, skillsRun, skillsHistory
+│   │   ├── governanceCommands.ts debtReport, locksShow, patternsShow, contractsShow, couplingTrend
+│   │   └── setupCommands.ts      harnessInstall, harnessValidate, setup, mcpConfigure
 │   └── utils/
-│       ├── output.ts             Wraps VSCode output channel
+│       ├── output.ts             Output channel wrapper
 │       ├── workspace.ts          Workspace path helpers
 │       └── config.ts             Settings → env var mapping
-├── webview-src/                  Webview TypeScript source
+├── webview-src/
 │   ├── graph/
-│   │   └── graph.ts              Cytoscape.js dependency graph
+│   │   ├── index.html            Dependency graph HTML
+│   │   └── graph.ts              Cytoscape.js fallback
 │   ├── harvest/
-│   │   └── harvest.ts            Context harvest query panel
+│   │   ├── index.html            Harvest query panel HTML
+│   │   └── harvest.ts            Query → postMessage → HarvestPanel.ts
 │   └── wizard/
-│       └── wizard.ts             Setup wizard multi-step flow
-├── media/
-│   ├── membrane.svg              Activity bar icon
-│   └── membrane-logo.svg         Marketplace logo
-├── resources/                    Runtime assets (built by CI)
-│   ├── wheels/contextpack-*.whl
-│   ├── uv-linux-x64, uv-darwin-*, uv-win32-x64.exe
-│   └── cytoscape.min.js
-├── package.json                  VSCode extension manifest + npm scripts
-├── tsconfig.json                 TypeScript compiler config
-├── esbuild.mjs                   Build bundler config
-├── .vscodeignore                 Files to exclude from VSIX
-├── README.md                     Marketplace listing
-├── CHANGELOG.md                  Release notes
+│       ├── index.html            6-step setup wizard HTML
+│       └── wizard.ts             Step navigation → postMessage → WizardPanel.ts
+├── package.json                  Extension manifest
+├── esbuild.mjs                   Build config (extension.js + 3 webview bundles)
 └── DEVELOPMENT.md                This file
 ```
 
@@ -63,262 +105,177 @@ membrane-vscode/
 ### Prerequisites
 
 - Node.js 18+
-- npm/yarn
-- VSCode 1.85.0+
+- VS Code 1.85.0+
+- Python 3.10+ with [uv](https://docs.astral.sh/uv/installation/) (`brew install uv`)
 
 ### Installation
 
 ```bash
 cd membrane-vscode
 npm install
-npm run compile
-npm run compile:webviews
+npm run compile          # builds out/extension.js
+npm run compile:webviews # builds out/webview-*.js
 ```
 
 ### Development Loop
 
-1. **Watch mode**: Continuously rebuild TypeScript as you edit
-   ```bash
-   npm run watch
-   npm run watch:webviews  # in another terminal
-   ```
-
-2. **Launch extension**: Press `F5` in VSCode (if `run` extension config exists), or manually:
-   - Open the membrane-vscode folder in VSCode
-   - Press `F5` → "Extension Development Host"
-
-3. **Live reload**: Changes to `.ts` files are auto-compiled; reload the extension host window (`Ctrl+R`)
-
-### Key Files to Edit
-
-| File | Purpose | Edit when... |
-|------|---------|-------------|
-| `src/extension.ts` | Extension lifecycle | Changing activation logic or initialization order |
-| `src/constants.ts` | All brand/config strings | Rebranding, adding commands, changing settings |
-| `src/commands/*.ts` | Command handlers | Adding/modifying commands |
-| `src/providers/*.ts` | Tree view data sources | Changing sidebar view contents |
-| `src/python/runner.ts` | CLI execution | Changing how Python commands are invoked |
-| `src/mcp/manager.ts` | MCP server lifecycle | Changing server startup/shutdown behavior |
-| `package.json` | VSCode manifest | Adding views, commands, keybindings, settings |
-
-## Compilation
-
-### TypeScript → JavaScript
-
-The extension uses esbuild for fast bundling:
-
 ```bash
-npm run compile              # Main extension code
-npm run compile:webviews    # Webview panels
-npm run prepackage          # Both (used before packaging)
+# Terminal 1 — watch extension code
+npm run watch
+
+# Terminal 2 — watch webview code
+npm run watch:webviews
+
+# VS Code — press F5 to launch Extension Development Host
+# After changes: Ctrl+Shift+P → "Developer: Reload Window"
 ```
 
-Output files land in `out/`:
-- `extension.js` — Main extension
-- `webview-graph.js` — Graph visualization
-- `webview-harvest.js` — Harvest panel
-- `webview-wizard.js` — Setup wizard
+## New Features (Phase 1 + 2)
 
-### Bundling Options
+### StatusBarManager (`src/statusBar.ts`)
 
-- **External `vscode`**: Don't bundle the VSCode API (it's provided by the host)
-- **Platform `node`**: Generate Node.js-compatible code
-- **Format `cjs`**: CommonJS (required for Node.js)
-- **Target `node18`**: Use ES2022 features that node18+ understands
+Two status bar items always visible in the lower-left:
+- **State item**: `Membrane: Starting... / Building... / Ready / Error (click)`
+  - Click → QuickPick with: Retry Setup / View Logs / Open Settings / Run Build Index
+- **Conflict item**: `⚠ N Agent Conflicts` (hidden when 0)
+  - Polls every 30s via `runner.runJson(['locks', '--json'])`
+  - Click → `membrane.locksShow`
 
-## Testing
+### Skill Gate Diagnostics (`src/diagnostics/skillGateDiagnostics.ts`)
 
-### Unit Tests
-Not yet implemented. Placeholder for future test suite.
+Skill gate violations appear in the VS Code **Problems** panel as red squiggles — exactly like TypeScript errors.
 
-### Manual Testing Checklist
+- Runs automatically on every file save (`onDidSaveTextDocument`)
+- `membrane.runSkillGatesAll` command runs gates on all git-changed files
+- Diagnostic format: `[Membrane/skill-name] violation message (blast radius: N)`
 
-1. **Activation**:
-   - [ ] uv detection works
-   - [ ] contextpack installation (if not present)
-   - [ ] MCP server starts
-   - [ ] Status bar items appear
-   - [ ] Symbol Explorer populates
+### WebView Panels
 
-2. **Build**:
-   - [ ] `Ctrl+Shift+M B` triggers build
-   - [ ] Output channel shows build progress
-   - [ ] Status bar changes from "Building..." → "Ready"
-   - [ ] `.contextpack/` directory created
+| Panel | Class | Trigger |
+|---|---|---|
+| Setup Wizard | `WizardPanel.ts` | Auto on first run, or `membrane.setup` |
+| Dependency Graph | `GraphPanel.ts` | `membrane.graphView` |
+| Harvest Context | `HarvestPanel.ts` | `membrane.harvest` or `membrane.harvestPanel` |
 
-3. **File Watcher**:
-   - [ ] Toggle watch: `Ctrl+Shift+M W`
-   - [ ] Save a file → incremental build triggered (after 1.5s debounce)
+**GraphPanel**: runs `context graphify --output .membrane/graph.html`, reads the self-contained vis.js HTML, and embeds it in a WebView. Falls back to the built-in Cytoscape view if graphify isn't available.
 
-4. **Commands**:
-   - [ ] `Harvest Context` opens dialog, executes `context harvest`
-   - [ ] `View Dependency Graph` opens webview
-   - [ ] `Show Context Debt` runs and outputs
+**WizardPanel**: executes backend steps (check uv → install → init → build → MCP config) when the user navigates through wizard steps.
 
-5. **Tree Views**:
-   - [ ] Symbol Explorer shows files/entities
-   - [ ] Clicking entity opens file at correct line
-   - [ ] Refresh buttons work
+**HarvestPanel**: replaces the previous input-dialog approach with a real WebView with query input, output area, and copy/open-in-editor buttons.
 
-6. **Settings**:
-   - [ ] All settings under `membrane.*` appear in settings UI
-   - [ ] Secret settings stored securely (API keys not in plaintext)
-   - [ ] Env vars passed to Python commands correctly
+### Proactive File Warnings
 
-## Python Integration
+When you open a file, Membrane checks `context patterns --file <path> --json`. If failure patterns are found, a warning notification appears: `"N known failure pattern(s) in this file"` with a "Review Patterns" button.
 
-The extension shells out to the Python `context` CLI via `ContextRunner.run()`.
+### All Empty States are Clickable
 
-### Commands Used
+Every tree view that has no data shows a `▶ Build Index to populate this view` item that, when clicked, triggers `membrane.build`. No more dead placeholder text.
 
-| Command | Purpose |
-|---------|---------|
-| `context init .` | Initialize `.contextpack/` |
-| `context build .` | Full build (scan → graph → embed → store) |
-| `context harvest "<query>"` | Harvest context |
-| `context ask "<question>"` | Ask LLM |
-| `context debt --json` | Show context debt |
-| `context locks --json` | Show agent locks |
-| `context patterns --json` | Show failure patterns |
-| `context coupling --json` | Show architectural coupling trend |
-| `context trust --json` | Show per-file trust scores (T1–T5) |
-| `context playbook --json` | Show auto-learned skill gate proposals |
-| `context-harness-mcp` | Start MCP server |
-| `context harness install` | Install harness (hooks, .mcp.json, etc.) |
+## Python Commands Reference
 
-### Adding CLI Support
+| Command | Flag | Used by |
+|---------|------|---------|
+| `context build` | — | BuildService |
+| `context harvest "<query>"` | — | HarvestPanel, harvestCommands |
+| `context ask "<q>"` | `--llm` | harvestCommands |
+| `context debt` | `--json` | contextDebtProvider |
+| `context locks` | `--json` | agentLocksProvider, StatusBar polling |
+| `context patterns` | `--json`, `--file <path>` | failurePatternsProvider, file-open warnings |
+| `context coupling` | `--json` | governanceCommands |
+| `context trust` | `--json` | trustScoresProvider |
+| `context playbook` | `--json` | playbookProvider |
+| `context skills history` | `--json` | skillGatesProvider |
+| `context skills run` | `--files <csv>`, `--json` | SkillGateDiagnosticProvider |
+| `context graphify` | `--output <path>` | GraphPanel |
+| `context harness install` | — | WizardPanel step 5, setupCommands |
+| `context-harness-mcp` | — | McpServerManager |
 
-If you need a new Python command:
+## Manual Testing Checklist
 
-1. Check that it's defined in `contextpack/cli/main.py`
-2. In `ContextRunner`, call:
-   ```typescript
-   const result = await runner.run(['subcommand', 'args']);
-   ```
-3. For JSON output, add `--json` flag to the Python command:
-   ```python
-   json_output: bool = typer.Option(False, "--json")
-   ```
-4. In TypeScript:
-   ```typescript
-   const data = await runner.runJson(['command', '--json']);
-   ```
+### Phase 1 — Reliability
 
-## MCP Server Integration
+- [ ] Status bar shows `Membrane: Starting...` on activation
+- [ ] Status bar transitions to `Membrane: Ready` when init completes
+- [ ] Status bar shows `Membrane: Error — <reason>` if uv missing
+- [ ] Clicking status bar item opens QuickPick with 4 options
+- [ ] All 7 tree view panels show clickable `▶ Build Index` when index missing
+- [ ] After `membrane.build`, panels refresh with real data
+- [ ] Agent conflict item appears in status bar when locks exist
 
-The MCP server (`context-harness-mcp`) is started as a subprocess on extension activation.
+### Phase 2 — Features
 
-**Configuration**: `.mcp.json` is auto-written by `mcpConfig.ts`:
+- [ ] Saving a file triggers skill gate check (visible in Problems panel)
+- [ ] `membrane.runSkillGatesAll` runs gates on git-changed files
+- [ ] `membrane.graphView` generates and opens the graph WebView
+- [ ] `membrane.harvest` opens HarvestPanel (not an input dialog)
+- [ ] Opening a file with failure patterns shows warning notification
+- [ ] First-run wizard opens on a fresh workspace
+- [ ] Wizard step 4 (Build) runs and logs output in the wizard panel
 
-```json
-{
-  "mcpServers": {
-    "context-harness": {
-      "command": "/absolute/path/to/uv",
-      "args": ["run", "--extra", "harness", "context-harness-mcp"],
-      "env": { "CONTEXTPACK_ROOT": "/workspace/path" }
-    }
-  }
-}
-```
+### Settings
 
-Claude Code reads this and connects to the MCP server automatically.
-
-### MCP Tools Available
-
-All 15 tools from `contextpack/mcp/server.py`:
-- `harvest_context` — Multi-source context for a query
-- `find_symbol` — Symbol lookup
-- `agent_memory_store` / `agent_memory_recall` — Shared memory
-- `get_skill_plan` — Skill gate plan
-- `run_skill_gate` — Execute skills
-- ... and 10 more
-
-## Packaging & Distribution
-
-### Create VSIX
-
-```bash
-npm run prepackage
-npm run package
-```
-
-Produces: `membrane-vscode-0.1.0.vsix` (ready to install or publish)
-
-### Publish to Marketplace
-
-```bash
-# Set PAT in environment or vsce config
-npm run publish --pat <your-vsce-pat>
-```
-
-See `.github/workflows/membrane-vscode-publish.yml` for CI/CD setup.
-
-## Debugging
-
-### VSCode Extension Debugger
-
-1. Press `F5` to launch Extension Development Host
-2. Breakpoints in `src/*.ts` are hit directly
-3. Use `Debug Console` for evaluating expressions
-
-### Output Channel
-
-All logs go to "Membrane" output channel via `log()` function.
-
-### Python Subprocess Output
-
-Spawned Python processes stream output to the Membrane output channel.
+- [ ] All `membrane.*` settings appear in VS Code settings UI
+- [ ] Changing embedding provider is reflected in next build
+- [ ] Jira settings reach the Python CLI as env vars
 
 ## Common Issues
 
 ### "uv not found"
-The bundled uv binary may not exist for your platform. Ensure:
-- VSIX was built on a multi-platform CI (GitHub Actions)
-- Or manually download uv binaries and place in `resources/`
+Install uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`  
+Or on Mac: `brew install uv`
 
 ### "contextpack not installed"
-The installer runs automatically on first activation. Check:
-- `~/.membrane/venv/` exists
-- `~/.membrane/venv/bin/python` (or Scripts/ on Windows) is executable
+Check `~/.membrane/venv/bin/python -c "import contextpack"`. If it fails, run `membrane.setup` wizard.
 
-### ".mcp.json not found"
-Extension auto-creates it. Check:
-- `membrane.autoMcpConfigure` is true
-- Workspace root is writable
+### Skill gate diagnostics don't appear
+The `context skills run --files <path> --json` command must return violations in the format:
+```json
+[{"file": "...", "line": 10, "message": "...", "severity": "error", "skill": "gate-name", "blast_radius": 3}]
+```
 
-### "MCP server won't start"
-Check:
-- `.mcp.json` has valid JSON syntax
-- `CONTEXTPACK_ROOT` env var is set
-- Python backend is accessible via `uv run context --version`
+### Graph WebView is blank
+GraphPanel falls back to Cytoscape if graphify fails. Check the Membrane output channel for the error. Make sure `graphify` is installed: `pip install graphifyy`.
+
+### MCP server won't start
+Check `.mcp.json` syntax, then: `uv run --extra harness context-harness-mcp` in the terminal.
+
+## Packaging
+
+```bash
+npm run prepackage   # compile extension + all 3 webviews
+npm run package      # produce membrane-vscode-0.1.0.vsix
+```
 
 ## Roadmap
 
-### Phase 2 (In Progress)
-- [ ] Webview panels styled + functional (graph, harvest, wizard)
-- [x] --json flags on all CLI commands (debt, locks, patterns, coupling, trust, playbook)
-- [x] Trust Scores sidebar panel (TrustScoresProvider + `context trust --json`)
-- [x] Playbook Proposals sidebar panel (PlaybookProvider + `context playbook --json`)
-- [x] Coupling Trend command renders structured JSON output
-- [ ] CodeLens on hub entities
-- [ ] Inline diagnostics (debt, patterns)
+### Done (Phase 1)
+- [x] StatusBarManager with state + conflict counter
+- [x] Fault-tolerant activation with try/catch and recovery QuickPick
+- [x] Platform-specific wheel detection + venv rollback in installer
+- [x] All tree providers: actionable "Build Index" CTA when empty
+- [x] trustScoresProvider and playbookProvider (full implementations)
+- [x] SkillGateDiagnosticProvider → VS Code Problems panel
+- [x] WizardPanel connected to backend steps
+- [x] GraphPanel with graphify integration (Cytoscape fallback)
+- [x] HarvestPanel (WebView with query/result UI)
+- [x] Failure pattern warnings on file open
+- [x] 30s conflict polling on status bar
+
+### In Progress (Phase 2)
+- [ ] CodeLens on hub entities (click to run skill gate for that file)
+- [ ] `@membrane` VS Code Chat participant
+- [ ] Context Debt WebView dashboard with bar charts
 
 ### Phase 3 (Planned)
+- [ ] Agent rule editor (editable `.contextpack/agent-rules.json`)
 - [ ] Multi-root workspace support
 - [ ] Remote/WSL extension host detection
-- [ ] GitHub Actions CI/CD verified
 - [ ] Marketplace submission
-
-### Phase 4+ (Future)
-- [ ] Source control integration
-- [ ] Activity feed
-- [ ] Export/share context bundles
-- [ ] Performance profiler
 
 ## Resources
 
-- [VSCode Extension API](https://code.visualstudio.com/api)
+- [VS Code Extension API](https://code.visualstudio.com/api)
 - [WebView API](https://code.visualstudio.com/api/extension-guides/webview)
 - [MCP Protocol](https://modelcontextprotocol.io/)
+- [graphify (vis.js graph generation)](https://github.com/safishamsi/graphify)
 - [contextpack Python docs](../README.md)

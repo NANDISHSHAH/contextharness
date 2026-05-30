@@ -140,12 +140,10 @@ export class SymbolExplorerProvider implements vscode.TreeDataProvider<SymbolTre
     if (!this.projectMap) {
       this.loadProjectMap();
       if (!this.projectMap) {
-        return Promise.resolve([
-          new SymbolTreeItem(
-            'No project map found. Run "Build Index" first.',
-            vscode.TreeItemCollapsibleState.None,
-          ),
-        ]);
+        const item = new SymbolTreeItem('▶ Build Index to explore symbols', vscode.TreeItemCollapsibleState.None);
+        item.command = { command: 'membrane.build', title: 'Build Index' };
+        item.iconPath = new vscode.ThemeIcon('play');
+        return Promise.resolve([item]);
       }
     }
 
@@ -163,12 +161,10 @@ export class SymbolExplorerProvider implements vscode.TreeDataProvider<SymbolTre
         });
 
       if (files.length === 0) {
-        return Promise.resolve([
-          new SymbolTreeItem(
-            'No symbols found. Run "Build Index" to scan code.',
-            vscode.TreeItemCollapsibleState.None,
-          ),
-        ]);
+        const item = new SymbolTreeItem('▶ Build Index to scan symbols', vscode.TreeItemCollapsibleState.None);
+        item.command = { command: 'membrane.build', title: 'Build Index' };
+        item.iconPath = new vscode.ThemeIcon('play');
+        return Promise.resolve([item]);
       }
 
       const items = files.map(

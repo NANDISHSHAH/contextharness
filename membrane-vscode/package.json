@@ -236,6 +236,22 @@
         "command": "membrane.refreshPlaybook",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "membrane.showStatus",
+        "title": "Show Membrane Status",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.harvestPanel",
+        "title": "Open Harvest Panel",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.runSkillGatesAll",
+        "title": "Run Skill Gates on Changed Files",
+        "category": "Membrane",
+        "icon": "$(shield)"
       }
     ],
     "configuration": {

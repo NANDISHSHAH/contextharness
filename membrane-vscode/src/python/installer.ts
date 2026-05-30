@@ -19,41 +19,45 @@ export async function installContextpack(
   const pythonPath = getPythonPath(venv);
   const localSourcePath = getLocalSourcePath(workspaceRoot);
 
-  // Find bundled wheel (optional)
+  // Find bundled wheel — prefer platform-specific, fall back to any .whl
   const wheelsDir = path.join(extensionPath, 'resources', 'wheels');
   let actualWheelPath: string | null = null;
 
   if (fs.existsSync(wheelsDir)) {
-    const files = fs.readdirSync(wheelsDir);
-    const wheelFile = files.find(f => f.endsWith('.whl'));
+    const files = fs.readdirSync(wheelsDir).filter(f => f.endsWith('.whl'));
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
+    const platformTag = process.platform === 'darwin' ? `macosx.*${arch}` : process.platform === 'win32' ? 'win' : 'linux';
+    const platformMatch = files.find(f => new RegExp(platformTag).test(f));
+    const wheelFile = platformMatch ?? files[0]; // fall back to first wheel
     if (wheelFile) {
       actualWheelPath = path.join(wheelsDir, wheelFile);
+      log(`Found bundled wheel: ${wheelFile}`);
     }
   }
 
+  const venvCreated = !fs.existsSync(pythonPath);
+
   try {
-    if (!fs.existsSync(pythonPath)) {
+    if (venvCreated) {
       progress?.report({ message: 'Creating venv...' });
       log(`Creating venv at ${venv}`);
-
-      // Create venv on first install.
       execSync(`"${uvPath}" venv "${venv}"`, { stdio: 'pipe', encoding: 'utf-8' });
-      log('venv created successfully');
+      log('venv created');
     } else {
       log(`Reusing existing venv at ${venv}`);
     }
 
     progress?.report({ message: 'Installing contextpack...', increment: 50 });
 
-    let installCmd = '';
+    let installCmd: string;
     if (localSourcePath) {
-      log(`Installing contextpack from local workspace source: ${localSourcePath}`);
+      log(`Installing from local workspace source: ${localSourcePath}`);
       installCmd = `"${uvPath}" pip install --python "${pythonPath}" "${localSourcePath}[harness]" -v`;
     } else if (actualWheelPath) {
-      log(`Installing contextpack from bundled wheel: ${actualWheelPath}`);
+      log(`Installing from bundled wheel: ${actualWheelPath}`);
       installCmd = `"${uvPath}" pip install --python "${pythonPath}" "${actualWheelPath}[harness]" -v`;
     } else {
-      log('No bundled wheel found, installing from PyPI...');
+      log('No bundled wheel — installing from PyPI...');
       installCmd = `"${uvPath}" pip install --python "${pythonPath}" "contextpack[harness]" -v`;
     }
 
@@ -75,10 +79,26 @@ export async function installContextpack(
     return true;
   } catch (error: any) {
     const errorMsg = error.stdout || error.stderr || error.message || String(error);
-    log(`❌ Installation failed: ${errorMsg}`);
+    log(`Installation failed: ${errorMsg}`);
+
+    // Roll back the venv only if we created it in this call
+    if (venvCreated && fs.existsSync(venv)) {
+      try {
+        fs.rmSync(venv, { recursive: true, force: true });
+        log('Rolled back partial venv after install failure');
+      } catch {
+        log('Warning: could not roll back venv');
+      }
+    }
+
     vscode.window.showErrorMessage(
-      `Membrane installation failed.\n\nError: ${errorMsg}\n\nTry manually installing:\n${uvPath} pip install --python ${pythonPath} contextpack[harness]`,
-    );
+      `Membrane: installation failed — ${errorMsg.slice(0, 120)}`,
+      'View Logs',
+    ).then(action => {
+      if (action === 'View Logs') {
+        vscode.commands.executeCommand('workbench.action.output.toggleOutput');
+      }
+    });
     return false;
   }
 }

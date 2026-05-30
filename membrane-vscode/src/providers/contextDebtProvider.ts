@@ -42,9 +42,10 @@ export class ContextDebtProvider implements vscode.TreeDataProvider<DebtTreeItem
   getChildren(element?: DebtTreeItem): Thenable<DebtTreeItem[]> {
     if (!element) {
       if (this.data.length === 0) {
-        return Promise.resolve([
-          new DebtTreeItem('Run "Build Index" to analyze context debt', vscode.TreeItemCollapsibleState.None),
-        ]);
+        const item = new DebtTreeItem('▶ Build Index to analyze context debt', vscode.TreeItemCollapsibleState.None);
+        item.command = { command: 'membrane.build', title: 'Build Index' };
+        item.iconPath = new vscode.ThemeIcon('play');
+        return Promise.resolve([item]);
       }
 
       return Promise.resolve(
