@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextpack.core.models import ParsedEntity
 from contextpack.core.protocols import Parser
+
 _PARSERS: dict[str, Parser] | None = None
 
 

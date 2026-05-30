@@ -1,7 +1,14 @@
 """ContextPack — universal AI context runtime."""
 
 __version__ = "0.1.0"
-__all__ = ["Project", "BuildStats", "AgentMemory", "SharedMemory", "WorkflowExtractor", "__version__"]
+__all__ = [
+    "Project",
+    "BuildStats",
+    "AgentMemory",
+    "SharedMemory",
+    "WorkflowExtractor",
+    "__version__",
+]
 
 
 def __getattr__(name: str):

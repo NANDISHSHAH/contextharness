@@ -11,6 +11,7 @@ from contextpack.skills.manifest import SkillManifest, SkillPolicy
 class SkillPlan(BaseModel):
     policies_matched: list[str] = Field(default_factory=list)
     required_skills: list[str] = Field(default_factory=list)
+    advisory_skills: list[str] = Field(default_factory=list)
     risk_score: float = 0.0
     blast_radius: int = 0
     hub_nodes_touched: list[str] = Field(default_factory=list)
@@ -24,6 +25,10 @@ class SkillPlan(BaseModel):
             f"Policies matched: {', '.join(self.policies_matched) or 'default'}",
             f"Required skills:  {', '.join(self.required_skills) or 'none'}",
         ]
+        if self.advisory_skills:
+            lines.append(
+                f"Advisory skills:  {', '.join(self.advisory_skills)} (non-blocking)"
+            )
         if self.hub_nodes_touched:
             lines.append(f"Hub nodes touched: {', '.join(self.hub_nodes_touched)}")
         if self.human_review_required:
@@ -76,11 +81,13 @@ class SkillRouter:
 
         # Merge requirements
         required_skills: set[str] = set()
+        advisory_skills: set[str] = set()
         human_review = False
         max_br: int | None = None
 
         for p in matched_policies:
             required_skills.update(p.require.skills)
+            advisory_skills.update(getattr(p.require, "advisory_skills", []) or [])
             if p.require.human_review:
                 human_review = True
             if p.require.max_blast_radius is not None:
@@ -89,6 +96,9 @@ class SkillRouter:
                     if max_br is None
                     else min(max_br, p.require.max_blast_radius)
                 )
+
+        # An advisory skill never blocks even if also listed as required by another policy
+        required_skills -= advisory_skills
 
         # ── Risk score ────────────────────────────────────────────────────────
         # 0.35 * hub_centrality_max
@@ -128,6 +138,7 @@ class SkillRouter:
         return SkillPlan(
             policies_matched=[p.name for p in matched_policies],
             required_skills=sorted(required_skills),
+            advisory_skills=sorted(advisory_skills),
             risk_score=round(risk_score, 3),
             blast_radius=blast_radius,
             hub_nodes_touched=hub_nodes_touched,

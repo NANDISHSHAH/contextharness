@@ -45,7 +45,7 @@ class ReasoningCheckpoint:
             "",
             "Before proceeding, confirm your understanding:",
             f"  Q1: What is the primary responsibility of {Path(symbol).stem}?",
-            f"  Q2: Which downstream modules will be affected by a signature change here?",
+            "  Q2: Which downstream modules will be affected by a signature change here?",
             "",
             "Your answer is validated against the graph. "
             "Mismatches trigger a re-briefing, not a block.",

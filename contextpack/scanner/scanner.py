@@ -13,7 +13,6 @@ from contextpack.utils.ignore import (
     should_ignore_file,
 )
 
-
 FRAMEWORK_MARKERS: dict[str, list[str]] = {
     "fastapi": ["from fastapi", "FastAPI("],
     "django": ["from django", "django."],
@@ -89,7 +88,10 @@ class RepositoryScanner:
                 continue
 
             # Only yield code + doc files
-            if path.suffix.lower() in LANGUAGE_EXTENSIONS or path.suffix in {".md", ".yaml", ".yml"}:
+            doc_exts = {".md", ".yaml", ".yml"}
+            if path.suffix.lower() in LANGUAGE_EXTENSIONS or (
+                path.suffix in doc_exts
+            ):
                 yield path, False
 
 

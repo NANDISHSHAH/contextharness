@@ -4,9 +4,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
 import structlog
+from pydantic import BaseModel, Field
 
 logger = structlog.get_logger(__name__)
 

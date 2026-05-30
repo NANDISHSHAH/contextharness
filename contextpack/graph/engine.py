@@ -14,7 +14,13 @@ class ContextGraph:
     def add_entity(self, entity_id: str, **attrs) -> None:
         self.graph.add_node(entity_id, **attrs)
 
-    def add_relationship(self, source: str, target: str, relation: str = "depends_on", **attrs) -> None:
+    def add_relationship(
+        self,
+        source: str,
+        target: str,
+        relation: str = "depends_on",
+        **attrs
+    ) -> None:
         self.graph.add_edge(source, target, relation=relation, **attrs)
 
     @classmethod
@@ -90,9 +96,13 @@ class ContextGraph:
                     continue
                 seen.add(node)
                 data = self.graph.nodes.get(node, {})
-                lines.append(f"- {data.get('name', node)} ({data.get('type', '?')})")
+                lines.append(
+                    f"- {data.get('name', node)} ({data.get('type', '?')})"
+                )
                 for _, tgt, edata in self.graph.out_edges(node, data=True):
-                    lines.append(f"    → {self.graph.nodes.get(tgt, {}).get('name', tgt)} [{edata.get('relation')}]")
+                    tgt_name = self.graph.nodes.get(tgt, {}).get('name', tgt)
+                    relation = edata.get('relation')
+                    lines.append(f"    → {tgt_name} [{relation}]")
         return "\n".join(lines) if lines else "_No graph nodes matched query._"
 
     def hub_entities(self, limit: int = 15) -> list[tuple[str, str, int]]:
@@ -152,8 +162,17 @@ class ContextGraph:
 
         scores: dict[str, float] = {}
         seed = seeds[0]
-        lengths = nx.single_source_shortest_path_length(self.graph.to_undirected(), seed, cutoff=4)
+        lengths = nx.single_source_shortest_path_length(
+            self.graph.to_undirected(), seed, cutoff=4
+        )
         for cand in candidates:
-            best = min((1.0 / (1 + lengths.get(c, 99)) for c in self.graph.nodes if cand in c), default=0.0)
+            best = min(
+                (
+                    1.0 / (1 + lengths.get(c, 99))
+                    for c in self.graph.nodes
+                    if cand in c
+                ),
+                default=0.0,
+            )
             scores[cand] = best
         return sorted(scores.items(), key=lambda x: x[1], reverse=True)

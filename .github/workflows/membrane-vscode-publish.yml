@@ -1,0 +1,116 @@
+name: Membrane VSCode Extension
+
+on:
+  push:
+    tags:
+      - 'membrane-v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Build Python wheel
+        working-directory: .
+        run: |
+          export PATH="/home/runner/.cargo/bin:$PATH"
+          uv build
+
+      - name: Copy wheel to extension resources
+        run: |
+          mkdir -p membrane-vscode/resources/wheels
+          cp dist/contextpack-*.whl membrane-vscode/resources/wheels/
+
+      - name: Download uv binaries for all platforms
+        working-directory: membrane-vscode/resources
+        run: |
+          mkdir -p wheels
+
+          # Linux x64
+          wget -q https://github.com/astral-sh/uv/releases/download/0.1.0/uv-x86_64-unknown-linux-gnu -O uv-linux-x64
+          chmod +x uv-linux-x64
+
+          # macOS ARM64
+          wget -q https://github.com/astral-sh/uv/releases/download/0.1.0/uv-aarch64-apple-darwin -O uv-darwin-arm64
+          chmod +x uv-darwin-arm64
+
+          # macOS x64
+          wget -q https://github.com/astral-sh/uv/releases/download/0.1.0/uv-x86_64-apple-darwin -O uv-darwin-x64
+          chmod +x uv-darwin-x64
+
+          # Windows x64
+          wget -q https://github.com/astral-sh/uv/releases/download/0.1.0/uv-x86_64-pc-windows-gnu.exe -O uv-win32-x64.exe
+          chmod +x uv-win32-x64.exe
+
+      - name: Download Cytoscape.js
+        working-directory: membrane-vscode/resources
+        run: |
+          wget -q https://cdn.jsdelivr.net/npm/cytoscape/build/cytoscape.min.js -O cytoscape.min.js
+
+      - name: Install Node dependencies
+        working-directory: membrane-vscode
+        run: npm ci
+
+      - name: Compile extension
+        working-directory: membrane-vscode
+        run: npm run prepackage
+
+      - name: Package VSIX
+        working-directory: membrane-vscode
+        run: |
+          npm install -g @vscode/vsce
+          vsce package --no-dependencies
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/membrane-}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Membrane ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+
+      - name: Upload VSIX
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./membrane-vscode/membrane-vscode-${{ steps.get_version.outputs.version }}.vsix
+          asset_name: membrane-vscode-${{ steps.get_version.outputs.version }}.vsix
+          asset_content_type: application/zip
+
+      - name: Publish to VSCode Marketplace
+        working-directory: membrane-vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          npx @vscode/vsce publish --pat $VSCE_PAT
+
+      - name: Publish to Cursor Registry (optional)
+        # Note: Cursor registry integration TBD
+        # This is a placeholder for future Cursor marketplace support
+        run: |
+          echo "Cursor marketplace publication coming soon"

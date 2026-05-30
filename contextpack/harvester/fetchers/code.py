@@ -32,8 +32,15 @@ class CodeContextFetcher:
             "### Relevant symbols",
         ]
         for ent in top_entities:
-            deps = ", ".join(ent.dependencies[:6]) if ent.dependencies else "—"
-            lines.append(f"- **{ent.name}** ({ent.type}) — {ent.summary or ent.file_path} [deps: {deps}]")
+            deps = (
+                ", ".join(ent.dependencies[:6])
+                if ent.dependencies
+                else "—"
+            )
+            summary = ent.summary or ent.file_path
+            lines.append(
+                f"- **{ent.name}** ({ent.type}) — {summary} [deps: {deps}]"
+            )
 
         return HarvestedContext(
             source=ContextSourceType.CODE,

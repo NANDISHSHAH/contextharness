@@ -41,16 +41,28 @@ class AzureFoundryLLM:
             raise ValueError("AZURE_OPENAI_API_KEY is required")
 
         if use_inference_endpoint or settings.azure_use_inference_endpoint:
-            # Foundry Model Inference / project endpoint (OpenAI-compatible, not api.openai.com)
-            base = (settings.azure_ai_inference_endpoint or settings.azure_openai_endpoint or "").rstrip("/")
+            # Foundry Model Inference / project endpoint
+            # (OpenAI-compatible, not api.openai.com)
+            base = (
+                settings.azure_ai_inference_endpoint
+                or settings.azure_openai_endpoint
+                or ""
+            ).rstrip("/")
             if not base:
-                raise ValueError("AZURE_AI_INFERENCE_ENDPOINT or AZURE_OPENAI_ENDPOINT is required")
+                raise ValueError(
+                    "AZURE_AI_INFERENCE_ENDPOINT or AZURE_OPENAI_ENDPOINT "
+                    "is required"
+                )
+            url = (
+                base if base.endswith("/v1") else f"{base}/openai/v1"
+            )
             self._client = AsyncOpenAI(
                 api_key=api_key,
-                base_url=base if base.endswith("/v1") else f"{base}/openai/v1",
+                base_url=url,
                 default_query={"api-version": self.api_version},
             )
-            self._model = self.deployment  # inference routes by deployment/model name in path or body
+            # inference routes by deployment/model name in path or body
+            self._model = self.deployment
             self._azure_mode = False
         else:
             endpoint = settings.azure_openai_endpoint

@@ -1,7 +1,6 @@
 """Context debt tracker — per-module staleness scoring."""
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 
@@ -161,7 +160,11 @@ class ContextDebtTracker:
             lines.append(r.to_row())
         critical = [r for r in records if r.is_critical()]
         if critical:
-            lines.extend(["", f"🚨 {len(critical)} module(s) at CRITICAL debt — re-index before using as context"])
+            msg = (
+                f"🚨 {len(critical)} module(s) at CRITICAL debt — "
+                "re-index before using as context"
+            )
+            lines.extend(["", msg])
         return "\n".join(lines)
 
 

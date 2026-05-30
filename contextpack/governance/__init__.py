@@ -1,9 +1,9 @@
 """Context governance — trust tiers, debt scoring, provenance, budget risk, agent locks."""
-from contextpack.governance.trust import TrustScorer, TrustScore, TrustTier
+from contextpack.governance.budget import BudgetRiskAnalyser, BudgetRiskLevel, BudgetRiskSignal
 from contextpack.governance.debt import ContextDebtTracker, DebtRecord
+from contextpack.governance.locks import AgentLock, AgentLockTable, ConflictReport
 from contextpack.governance.provenance import ProvenanceChain, ProvenanceRecord
-from contextpack.governance.budget import BudgetRiskAnalyser, BudgetRiskSignal, BudgetRiskLevel
-from contextpack.governance.locks import AgentLockTable, AgentLock, ConflictReport
+from contextpack.governance.trust import TrustScore, TrustScorer, TrustTier
 
 __all__ = [
     "TrustScorer", "TrustScore", "TrustTier",

@@ -11,7 +11,6 @@ from watchdog.observers import Observer
 
 from contextpack.core.project import Project
 
-
 _SOURCE_EXTS = {
     ".py", ".ts", ".tsx", ".js", ".jsx",
     ".md", ".yaml", ".yml",
@@ -40,9 +39,10 @@ class _IncrementalHandler(FileSystemEventHandler):
         self._trigger()
 
     def _trigger(self) -> None:
-        from contextpack.memory.store import format_changeset
         from rich.console import Console
         from rich.panel import Panel
+
+        from contextpack.memory.store import format_changeset
 
         console = Console()
 

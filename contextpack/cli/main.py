@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -29,9 +28,10 @@ def _run(coro):
 
 @app.command("init")
 def init(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
 ) -> None:
     """Initialize .contextpack workspace."""
+    path = path or Path.cwd()
     project = Project(path)
     _run(project.init())
     console.print(f"[green]✓[/green] initialized ContextPack at {project.context_dir}")
@@ -39,28 +39,52 @@ def init(
 
 @app.command("build")
 def build(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    timing: bool = typer.Option(False, "--timing", help="Print language breakdown after build"),
-    vibe: bool = typer.Option(False, "--vibe", help="Animated Pac-Man build display with token/cost tracking"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    timing: bool = typer.Option(  # noqa: B008
+        False, "--timing", help="Print language breakdown after build"
+    ),
+    vibe: bool = typer.Option(  # noqa: B008
+        False,
+        "--vibe",
+        help="Animated Pac-Man build display with token/cost tracking",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output build stats"),  # noqa: B008
 ) -> None:
     """Scan, parse, graph, embed, and index repository."""
+    import json
+
     from contextpack.core.config import get_settings
 
+    path = path or Path.cwd()
     project = Project(path)
     _run(project.init())
 
-    if vibe:
-        from contextpack.cli.vibes import VibeBuild, vibe_build_footer
+    pmap, stats = _run(project.build())
+
+    if json_output:
+        import dataclasses
+        output = {
+            "entities": len(pmap.entities),
+            "hub_entities": stats.hub_entities,
+            "chunks": stats.chunks,
+            "estimated_tokens": stats.estimated_tokens,
+            "phase_times": (
+                dataclasses.asdict(stats.phase_times)
+                if hasattr(stats, 'phase_times')
+                else {}
+            ),
+            "total_time": stats.total_time,
+        }
+        print(json.dumps(output))
+    elif vibe:
         from rich.table import Table
 
+        from contextpack.cli.vibes import vibe_build_footer
+
         provider = get_settings().embedding_provider
-        with VibeBuild(console) as on_phase:
-            pmap, stats = _run(project.build(on_phase=on_phase))
         vibe_build_footer(console, stats, provider)
     else:
         from rich.table import Table
-
-        pmap, stats = _run(project.build())
 
         table = Table(show_header=False, box=None, padding=(0, 2))
         table.add_column(style="bold cyan", width=8)
@@ -68,24 +92,56 @@ def build(
         table.add_column()
 
         def _t(phase: str) -> str:
-            return f"{stats.phase_times.get(phase, 0):.2f}s"
+            if hasattr(stats, 'phase_times'):
+                return f"{stats.phase_times.get(phase, 0):.2f}s"
+            return "0.00s"
 
-        table.add_row("scan",  _t("scan"),  f"{stats.files_scanned} files scanned  |  [yellow]{stats.files_skipped} skipped[/yellow]")
-        table.add_row("parse", _t("parse"), f"{stats.entities} entities  (from {stats.files_indexed} files)")
         table.add_row(
-            "graph", _t("graph"),
-            f"{len(pmap.entities)} entities indexed  |  {stats.hub_entities} hub nodes",
+            "scan",
+            _t("scan"),
+            (
+                f"{stats.files_scanned} files scanned  |  "
+                f"[yellow]{stats.files_skipped} skipped[/yellow]"
+            ),
         )
-        table.add_row("chunk", _t("chunk"), f"{stats.chunks} chunks  ~{stats.estimated_tokens:,} tokens estimated")
         table.add_row(
-            "embed", _t("embed"),
-            f"{stats.embed_count} embedded  |  [dim]{stats.store_only_count} store-only[/dim]",
+            "parse",
+            _t("parse"),
+            f"{stats.entities} entities  (from {stats.files_indexed} files)",
+        )
+        table.add_row(
+            "graph",
+            _t("graph"),
+            (
+                f"{len(pmap.entities)} entities indexed  |  "
+                f"{stats.hub_entities} hub nodes"
+            ),
+        )
+        table.add_row(
+            "chunk",
+            _t("chunk"),
+            (
+                f"{stats.chunks} chunks  ~{stats.estimated_tokens:,} "
+                "tokens estimated"
+            ),
+        )
+        table.add_row(
+            "embed",
+            _t("embed"),
+            (
+                f"{stats.embed_count} embedded  |  "
+                f"[dim]{stats.store_only_count} store-only[/dim]"
+            ),
         )
         table.add_row("store", _t("store"), f"{stats.entities} entities → memory.db")
         table.add_row("[bold]total[/bold]", f"[bold]{stats.total_time:.2f}s[/bold]", "")
 
         console.print()
-        console.print(Panel(table, title="[green]Build complete[/green]", border_style="green"))
+        console.print(
+            Panel(
+                table, title="[green]Build complete[/green]", border_style="green"
+            )
+        )
 
     if timing:
         console.print(f"\n[dim]Languages: {pmap.languages}[/dim]")
@@ -94,20 +150,25 @@ def build(
 @app.command("ask")
 def ask(
     question: str = typer.Argument(..., help="Question about the codebase"),
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    branch: Optional[str] = typer.Option(None, "--branch", help="Branch name for Jira ticket extraction"),
-    llm: bool = typer.Option(
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    branch: str | None = typer.Option(  # noqa: B008
+        None, "--branch", help="Branch name for Jira ticket extraction"
+    ),
+    llm: bool = typer.Option(  # noqa: B008
         False,
         "--llm",
         help="Use configured LLM (Azure Foundry / OpenAI) instead of offline synthesis",
     ),
-    vibe: bool = typer.Option(False, "--vibe", help="Show token usage and cost estimate after answer"),
+    vibe: bool = typer.Option(  # noqa: B008
+        False, "--vibe", help="Show token usage and cost estimate after answer"
+    ),
 ) -> None:
     """Ask using complete harvested agent context."""
     import time as _time
 
     from contextpack.core.config import get_settings
 
+    path = path or Path.cwd()
     project = Project(path)
 
     if vibe:
@@ -138,10 +199,11 @@ def ask(
 @app.command("harvest")
 def harvest(
     query: str = typer.Argument(..., help="Query to harvest context for"),
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    branch: Optional[str] = typer.Option(None, "--branch"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    branch: str | None = typer.Option(None, "--branch"),  # noqa: B008
 ) -> None:
     """Harvest and aggregate all context sources (meetup architecture)."""
+    path = path or Path.cwd()
     project = Project(path)
     agg = _run(project.harvest(query, branch_name=branch))
     console.print(agg.to_agent_prompt_block())
@@ -149,12 +211,18 @@ def harvest(
 
 @app.command("graph")
 def graph(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    query: str = typer.Option("architecture", "--query", "-q"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    query: str = typer.Option("architecture", "--query", "-q"),  # noqa: B008
 ) -> None:
     """Show dependency graph excerpt."""
+    path = path or Path.cwd()
     project = Project(path)
-    console.print(project.graph_summary() if project.context_dir.exists() else "Run context build first.")
+    msg = (
+        project.graph_summary()
+        if project.context_dir.exists()
+        else "Run context build first."
+    )
+    console.print(msg)
 
 
 harness_app = typer.Typer(help="Context Harness — workflow layer (hooks, MCP, validation)")
@@ -163,33 +231,37 @@ app.add_typer(harness_app, name="harness")
 
 @harness_app.command("install")
 def harness_install(
-    path: Path = typer.Argument(Path.cwd(), help="Target repository"),
-    force: bool = typer.Option(False, "--force", help="Overwrite existing harness files"),
+    path: Path | None = typer.Argument(None, help="Target repository"),  # noqa: B008
+    force: bool = typer.Option(False, "--force", help="Overwrite existing harness files"),  # noqa: B008
 ) -> None:
     """Install .cursor hooks, skills, .mcp.json, and AGENTS.md template."""
+    path = path or Path.cwd()
     written = install_harness(path, force=force)
     if written:
         console.print("[green]✓[/green] installed Context Harness:")
         for w in written:
             console.print(f"  - {w}")
     else:
-        console.print("[yellow]![/yellow] nothing written (files exist; use --force)")
+        msg = "[yellow]![/yellow] nothing written (files exist; use --force)"
+        console.print(msg)
 
 
 @harness_app.command("orient")
 def harness_orient(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    query: str = typer.Option("architecture", "--query", "-q"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    query: str = typer.Option("architecture", "--query", "-q"),  # noqa: B008
 ) -> None:
     """Print session orientation (same text as sessionStart hook)."""
+    path = path or Path.cwd()
     console.print(build_orientation(path.resolve(), query=query))
 
 
 @harness_app.command("validate")
 def harness_validate(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
 ) -> None:
     """Validate AGENTS.md / CLAUDE.md against graph hubs."""
+    path = path or Path.cwd()
     result = validate_harness_docs(path.resolve())
     console.print(result.to_markdown())
     if not result.ok:
@@ -198,46 +270,56 @@ def harness_validate(
 
 @harness_app.command("session-start")
 def harness_session_start(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
 ) -> None:
     """Cursor sessionStart hook (JSON on stdin → JSON on stdout)."""
     from contextpack.cli.harness_hooks import session_start
 
+    path = path or Path.cwd()
     raise typer.Exit(code=session_start(path.resolve()))
 
 
 @harness_app.command("stop-validate")
 def harness_stop_validate(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
 ) -> None:
     """Cursor stop hook — doc/graph drift follow-up."""
     from contextpack.cli.harness_hooks import stop_validate
 
+    path = path or Path.cwd()
     raise typer.Exit(code=stop_validate(path.resolve()))
 
 
 @app.command("watch")
 def watch_cmd(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
 ) -> None:
     """Watch repository and rebuild incrementally on file changes."""
     from contextpack.watch.watcher import run_watch
 
+    path = path or Path.cwd()
     run_watch(path)
 
 
 @app.command("changes")
 def changes_cmd(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    limit: int = typer.Option(30, "--limit", "-n", help="Number of recent changes to show"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    limit: int = typer.Option(  # noqa: B008
+        30, "--limit", "-n", help="Number of recent changes to show"
+    ),
 ) -> None:
     """Show file changes recorded by incremental builds (Phase 3)."""
     from rich.table import Table
 
+    path = path or Path.cwd()
     project = Project(path)
     rows = _run(project.recent_changes(limit=limit))
     if not rows:
-        console.print("[dim]No change log yet — run `context watch` or `context build`.[/dim]")
+        msg = (
+            "[dim]No change log yet — run `context watch` or `context build`."
+            "[/dim]"
+        )
+        console.print(msg)
         return
 
     table = Table(show_header=True, header_style="bold cyan")
@@ -262,13 +344,15 @@ def changes_cmd(
 
 @app.command("workflows")
 def workflows_cmd(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
 ) -> None:
     """List workflows extracted from the codebase (Phase 5)."""
+    path = path or Path.cwd()
     project = Project(path)
     wfs = _run(project.workflows())
     if not wfs:
-        console.print("[dim]No workflows yet — run `context build` first.[/dim]")
+        msg = "[dim]No workflows yet — run `context build` first.[/dim]"
+        console.print(msg)
         return
 
     console.print(f"\n[bold]Extracted workflows[/bold] ({len(wfs)})\n")
@@ -293,13 +377,16 @@ app.add_typer(skills_app, name="skills")
 @skills_app.command("plan")
 def skills_plan(
     files: str = typer.Argument(..., help="Comma-separated changed file paths"),
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    blast_radius: int = typer.Option(0, "--blast-radius", "-b", help="Known blast radius"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    blast_radius: int = typer.Option(  # noqa: B008
+        0, "--blast-radius", "-b", help="Known blast radius"
+    ),
 ) -> None:
     """Compute a SkillPlan for the given changed files."""
     from contextpack.skills.manifest import SkillManifest
     from contextpack.skills.router import SkillRouter
 
+    path = path or Path.cwd()
     changed = [f.strip() for f in files.split(",") if f.strip()]
     manifest = SkillManifest.load(path)
     plan = SkillRouter(manifest).route(changed, blast_radius=blast_radius)
@@ -310,19 +397,24 @@ def skills_plan(
 @skills_app.command("run")
 def skills_run(
     files: str = typer.Argument(..., help="Comma-separated changed file paths"),
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    blast_radius: int = typer.Option(0, "--blast-radius", "-b"),
-    agent_id: str = typer.Option("default", "--agent-id"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    blast_radius: int = typer.Option(0, "--blast-radius", "-b"),  # noqa: B008
+    agent_id: str = typer.Option("default", "--agent-id"),  # noqa: B008
 ) -> None:
     """Run the full skill verification gate (plan → enforce → execute → record)."""
     from contextpack.skills.manifest import SkillManifest
     from contextpack.skills.verifier import SkillVerifierLoop
 
+    path = path or Path.cwd()
     changed = [f.strip() for f in files.split(",") if f.strip()]
     manifest = SkillManifest.load(path)
     db = path / ".contextpack" / "memory.db"
     loop = SkillVerifierLoop(db)
-    result = _run(loop.verify(changed, path, manifest, blast_radius=blast_radius, agent_id=agent_id))
+    result = _run(
+        loop.verify(
+            changed, path, manifest, blast_radius=blast_radius, agent_id=agent_id
+        )
+    )
     console.print()
     console.print(result.to_text())
     if not result.allowed:
@@ -331,38 +423,70 @@ def skills_run(
 
 @skills_app.command("history")
 def skills_history(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    limit: int = typer.Option(10, "--limit", "-n"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    limit: int = typer.Option(10, "--limit", "-n"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
 ) -> None:
     """Show recent evidence bundles (skill gate audit trail)."""
+    import json
+
     from rich.table import Table
+
     from contextpack.skills.evidence import EvidenceStore
 
+    path = path or Path.cwd()
     db = path / ".contextpack" / "memory.db"
+    if not db.exists():
+        if json_output:
+            print(json.dumps([]))
+        else:
+            console.print("[dim]No evidence bundles yet. Run `context skills run` first.[/dim]")
+        return
+
     store = EvidenceStore(db)
     bundles = _run(store.list_recent(limit=limit))
-    if not bundles:
-        console.print("[dim]No evidence bundles yet. Run `context skills run` first.[/dim]")
-        return
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Action ID", style="dim", width=14)
-    table.add_column("Agent", width=10)
-    table.add_column("Files")
-    table.add_column("Skills", width=30)
-    table.add_column("Result", width=8)
-    for b in bundles:
-        icon = "[green]✅[/green]" if b.passed else "[red]❌[/red]"
-        skills_str = " ".join(
-            ("✅" if r.get("passed") else "❌") + r["skill"] for r in b.skill_results[:4]
-        )
-        table.add_row(
-            b.action_id,
-            b.agent_id,
-            ", ".join(b.files_modified[:2]),
-            skills_str,
-            icon,
-        )
-    console.print(table)
+
+    if json_output:
+        output = [
+            {
+                "action_id": b.action_id,
+                "agent_id": b.agent_id,
+                "files": b.files_modified,
+                "files_modified": b.files_modified,
+                "skill_results": b.skill_results if hasattr(b, 'skill_results') else [],
+                "passed": b.passed,
+            }
+            for b in bundles
+        ]
+        print(json.dumps(output))
+    else:
+        if not bundles:
+            msg = (
+                "[dim]No evidence bundles yet. Run `context skills run` first."
+                "[/dim]"
+            )
+            console.print(msg)
+            return
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Action ID", style="dim", width=14)
+        table.add_column("Agent", width=10)
+        table.add_column("Files")
+        table.add_column("Skills", width=30)
+        table.add_column("Result", width=8)
+        for b in bundles:
+            icon = "[green]✅[/green]" if b.passed else "[red]❌[/red]"
+            skills_str = " ".join(
+                (("✅" if r.get("passed") else "❌") + r["skill"])
+                for r in b.skill_results[:4]
+            )
+            table.add_row(
+                b.action_id,
+                b.agent_id,
+                ", ".join(b.files_modified[:2]),
+                skills_str,
+                icon,
+            )
+        console.print(table)
 
 
 # ── Phase 7: Contracts ────────────────────────────────────────────────────────
@@ -374,11 +498,12 @@ app.add_typer(contracts_app, name="contracts")
 @contracts_app.command("show")
 def contracts_show(
     symbol: str = typer.Argument("", help="Symbol name to look up (empty = all)"),
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
 ) -> None:
     """Show extracted contracts for a symbol."""
     from contextpack.contracts.registry import ContractRegistry
 
+    path = path or Path.cwd()
     db = path / ".contextpack" / "memory.db"
     reg = ContractRegistry(db)
     if symbol:
@@ -386,21 +511,27 @@ def contracts_show(
     else:
         results = _run(reg.list_all(limit=30))
     if not results:
-        console.print("[dim]No contracts indexed. Run `context build` first.[/dim]")
+        msg = "[dim]No contracts indexed. Run `context build` first.[/dim]"
+        console.print(msg)
         return
     console.print(reg.format_for_context(results))
 
 
 @contracts_app.command("check")
 def contracts_check(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
 ) -> None:
     """Check architectural invariants against the current codebase."""
     from contextpack.contracts.invariants import InvariantConfig, InvariantGuard
 
+    path = path or Path.cwd()
     config = InvariantConfig.load(path)
     if not config.invariants:
-        console.print("[yellow]No invariants.yml found. Create .contextpack/invariants.yml[/yellow]")
+        msg = (
+            "[yellow]No invariants.yml found. "
+            "Create .contextpack/invariants.yml[/yellow]"
+        )
+        console.print(msg)
         return
     db = path / ".contextpack" / "memory.db"
     guard = InvariantGuard(db)
@@ -418,108 +549,409 @@ def contracts_check(
 
 @app.command("debt")
 def debt_cmd(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    limit: int = typer.Option(30, "--limit", "-n"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    limit: int = typer.Option(30, "--limit", "-n"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
 ) -> None:
     """Show per-module context debt scores (Phase 8)."""
+    import json
+
     from contextpack.governance.debt import ContextDebtTracker
 
+    path = path or Path.cwd()
     db = path / ".contextpack" / "memory.db"
+    if not db.exists():
+        if json_output:
+            print(json.dumps([]))
+        else:
+            console.print("[dim]Run 'context build' first to analyze context debt[/dim]")
+        return
+
     tracker = ContextDebtTracker(db)
     records = _run(tracker.list_all(limit=limit))
-    console.print(tracker.format_report(records))
+
+    if json_output:
+        output = [
+            {
+                "module": r.file_path,
+                "score": r.debt_score,
+                "tier": r.action,
+                "days_stale": r.days_stale,
+                "churn": r.churn_rate,
+                "hub_centrality": r.hub_centrality,
+            }
+            for r in records
+        ]
+        print(json.dumps(output))
+    else:
+        console.print(tracker.format_report(records))
 
 
 @app.command("locks")
 def locks_cmd(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
 ) -> None:
     """Show active agent locks (multi-agent conflict table) (Phase 8)."""
+    import datetime
+    import json
+
     from rich.table import Table
+
     from contextpack.governance.locks import AgentLockTable
 
+    path = path or Path.cwd()
     db = path / ".contextpack" / "memory.db"
+    if not db.exists():
+        if json_output:
+            print(json.dumps([]))
+        else:
+            console.print("[dim]No active locks.[/dim]")
+        return
+
     lock_table = AgentLockTable(db)
     active = _run(lock_table.list_active())
-    if not active:
-        console.print("[dim]No active locks.[/dim]")
-        return
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Lock ID", style="dim", width=14)
-    table.add_column("Agent", width=12)
-    table.add_column("Files")
-    table.add_column("Expires", width=10)
-    import datetime
-    for lock in active:
-        exp = datetime.datetime.fromtimestamp(lock.expires_at).strftime("%H:%M:%S")
-        table.add_row(
-            lock.lock_id,
-            lock.agent_id,
-            ", ".join(lock.files[:3]),
-            exp,
-        )
-    console.print(table)
+
+    if json_output:
+        output = [
+            {
+                "lock_id": lock.lock_id,
+                "agent_id": lock.agent_id,
+                "files": lock.files,
+                "acquired_at": (
+                    datetime.datetime.fromtimestamp(
+                        lock.acquired_at
+                    ).isoformat()
+                    if hasattr(lock, 'acquired_at')
+                    else None
+                ),
+                "expires_at": datetime.datetime.fromtimestamp(
+                    lock.expires_at
+                ).isoformat(),
+            }
+            for lock in active
+        ]
+        print(json.dumps(output))
+    else:
+        if not active:
+            console.print("[dim]No active locks.[/dim]")
+            return
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Lock ID", style="dim", width=14)
+        table.add_column("Agent", width=12)
+        table.add_column("Files")
+        table.add_column("Expires", width=10)
+        for lock in active:
+            exp = (
+                datetime.datetime.fromtimestamp(lock.expires_at).strftime(
+                    "%H:%M:%S"
+                )
+            )
+            table.add_row(
+                lock.lock_id,
+                lock.agent_id,
+                ", ".join(lock.files[:3]),
+                exp,
+            )
+        console.print(table)
 
 
 # ── Phase 9: Adaptive Intelligence ───────────────────────────────────────────
 
 @app.command("patterns")
 def patterns_cmd(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    limit: int = typer.Option(20, "--limit", "-n"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    limit: int = typer.Option(20, "--limit", "-n"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
 ) -> None:
     """Show recurring failure patterns (Phase 9)."""
+    import json
+
     from contextpack.adaptive.patterns import FailurePatternStore
 
+    path = path or Path.cwd()
     db = path / ".contextpack" / "memory.db"
+    if not db.exists():
+        if json_output:
+            print(json.dumps([]))
+        else:
+            console.print("[dim]No failure patterns recorded yet.[/dim]")
+        return
+
     store = FailurePatternStore(db)
     patterns = _run(store.list_all(limit=limit))
-    if not patterns:
-        console.print("[dim]No failure patterns recorded yet.[/dim]")
-        return
-    console.print(f"\n[bold]Failure Patterns[/bold] ({len(patterns)})\n")
-    for p in patterns:
-        color = "red" if p.frequency >= 5 else "yellow"
-        console.print(f"[{color}]{p.failure_class}[/{color}]  ×{p.frequency}  [{p.skill}]  {p.file_pattern}")
-        if p.remediation_hint:
-            console.print(f"  [dim]{p.remediation_hint}[/dim]")
+
+    if json_output:
+        output = [
+            {
+                "pattern_id": (
+                    p.pattern_id
+                    if hasattr(p, 'pattern_id')
+                    else f"{p.failure_class}_{p.file_pattern}"
+                ),
+                "failure_class": p.failure_class,
+                "category": p.failure_class,
+                "glob": p.file_pattern,
+                "frequency": p.frequency,
+                "count": p.frequency,
+                "skill": p.skill if hasattr(p, 'skill') else None,
+                "remediation_hint": (
+                    p.remediation_hint
+                    if hasattr(p, 'remediation_hint')
+                    else None
+                ),
+            }
+            for p in patterns
+        ]
+        print(json.dumps(output))
+    else:
+        if not patterns:
+            msg = "[dim]No failure patterns recorded yet.[/dim]"
+            console.print(msg)
+            return
+        console.print(f"\n[bold]Failure Patterns[/bold] ({len(patterns)})\n")
+        for p in patterns:
+            color = "red" if p.frequency >= 5 else "yellow"
+            console.print(
+                f"[{color}]{p.failure_class}[/{color}]  ×{p.frequency}  "
+                f"[{p.skill}]  {p.file_pattern}"
+            )
+            if p.remediation_hint:
+                console.print(f"  [dim]{p.remediation_hint}[/dim]")
 
 
 @app.command("coupling")
 def coupling_cmd(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    days: int = typer.Option(30, "--days", "-d", help="Trend window in days"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    days: int = typer.Option(30, "--days", "-d", help="Trend window in days"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
 ) -> None:
     """Show architectural coupling trend over time (Phase 9)."""
+    import json
+
     from contextpack.adaptive.coupling import CouplingMonitor
 
+    path = path or Path.cwd()
     db = path / ".contextpack" / "memory.db"
     monitor = CouplingMonitor(db)
     trend = _run(monitor.trend(days=days))
-    console.print(trend.to_text())
+
+    if json_output:
+        latest = trend.snapshots[-1] if trend.snapshots else None
+        output = {
+            "coupling_change_pct": trend.coupling_change_pct,
+            "hub_change": trend.hub_change,
+            "cycle_change": trend.cycle_change,
+            "is_decaying": trend.is_decaying,
+            "alert_message": trend.alert_message,
+            "hotspot_modules": trend.hotspot_modules,
+            "snapshot_count": len(trend.snapshots),
+            "latest": {
+                "edge_count": latest.edge_count,
+                "node_count": latest.node_count,
+                "hub_count": latest.hub_count,
+                "cycle_count": latest.cycle_count,
+                "avg_coupling": latest.avg_coupling,
+            } if latest else None,
+        }
+        print(json.dumps(output))
+    else:
+        console.print(trend.to_text())
+
+
+# ── Trust Scoring ─────────────────────────────────────────────────────────────
+
+@app.command("trust")
+def trust_cmd(
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
+) -> None:
+    """Show trust scores for project files based on source type and freshness."""
+    import json as json_mod
+    import subprocess
+    import time
+
+    from contextpack.governance.trust import TrustScorer
+
+    path = path or Path.cwd()
+    pm_path = path / ".contextpack" / "project_map.json"
+    if not pm_path.exists():
+        if json_output:
+            print(json_mod.dumps([]))
+        else:
+            console.print("[dim]Run 'context build' first to compute trust scores[/dim]")
+        return
+
+    with pm_path.open() as f:
+        pm = json_mod.load(f)
+
+    scorer = TrustScorer()
+    results = []
+
+    for file_info in pm.get("files", []):
+        file_path = file_info.get("path", "")
+        language = file_info.get("language", "")
+        if not file_path:
+            continue
+
+        fp_lower = file_path.lower()
+        if (
+            "test_" in fp_lower
+            or "_test" in fp_lower
+            or ".spec." in fp_lower
+            or ".test." in fp_lower
+        ):
+            source_type = "test"
+        elif language in ("markdown", "rst") or fp_lower.endswith((".md", ".rst")):
+            source_type = "docs"
+        else:
+            source_type = "code"
+
+        days_old: float = 0.0
+        try:
+            git_result = subprocess.run(
+                ["git", "log", "-1", "--format=%ct", "--", file_path],
+                cwd=str(path),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if git_result.returncode == 0 and git_result.stdout.strip():
+                ts_val = int(git_result.stdout.strip())
+                days_old = (time.time() - ts_val) / 86400
+        except Exception:
+            pass
+
+        ts = scorer.score_chunk(
+            source_type=source_type,
+            file_path=file_path,
+            days_since_modified=days_old,
+        )
+        results.append(
+            {
+                "file": file_path,
+                "tier": ts.tier,
+                "score": ts.score,
+                "label": ts.label,
+                "source_type": source_type,
+                "rationale": ts.rationale,
+            }
+        )
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    if json_output:
+        print(json_mod.dumps(results))
+    else:
+        from rich.table import Table
+
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("File", max_width=55)
+        table.add_column("Tier", width=5, justify="right")
+        table.add_column("Score", width=6, justify="right")
+        table.add_column("Label", width=16)
+        for r in results[:40]:
+            color = (
+                "green"
+                if r["tier"] <= 2
+                else "yellow"
+                if r["tier"] == 3
+                else "red"
+            )
+            table.add_row(
+                r["file"],
+                str(r["tier"]),
+                f"{r['score']:.3f}",
+                f"[{color}]{r['label']}[/{color}]",
+            )
+        console.print("\n[bold]Trust Scores[/bold]\n")
+        console.print(table)
+
+
+# ── Playbook Learning ─────────────────────────────────────────────────────────
+
+@app.command("playbook")
+def playbook_cmd(
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
+) -> None:
+    """Show auto-learned playbook proposals from observed skill gate runs (Phase 9)."""
+    import json as json_mod
+
+    from contextpack.adaptive.playbook import PlaybookLearner
+    from contextpack.skills.evidence import EvidenceStore
+
+    path = path or Path.cwd()
+    db = path / ".contextpack" / "memory.db"
+    if not db.exists():
+        if json_output:
+            print(json_mod.dumps([]))
+        else:
+            console.print("[dim]No evidence bundles yet — run skill gates first[/dim]")
+        return
+
+    store = EvidenceStore(db)
+    bundles = _run(store.list_recent(limit=100))
+
+    records = [
+        {
+            "files_modified": b.files_modified,
+            "skill_results": b.skill_results,
+            "passed": b.passed,
+        }
+        for b in bundles
+    ]
+
+    learner = PlaybookLearner()
+    proposals = learner.propose(records)
+
+    if json_output:
+        output = [
+            {
+                "policy_name": p.policy_name,
+                "description": p.description,
+                "file_pattern": p.file_pattern,
+                "skills_to_add": p.skills_to_add,
+                "confidence": p.confidence,
+                "evidence": p.evidence,
+                "yaml_block": p.to_yaml_block(),
+            }
+            for p in proposals
+        ]
+        print(json_mod.dumps(output))
+    else:
+        console.print(learner.format_proposals(proposals))
 
 
 @app.command("snapshots")
 def snapshots_cmd(
-    path: Path = typer.Argument(Path.cwd(), help="Repository path"),
-    limit: int = typer.Option(10, "--limit", "-n"),
-    diff: Optional[str] = typer.Option(None, "--diff", help="Diff two snapshot IDs: before,after"),
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    limit: int = typer.Option(10, "--limit", "-n"),  # noqa: B008
+    diff: str | None = typer.Option(  # noqa: B008
+        None, "--diff", help="Diff two snapshot IDs: before,after"
+    ),
 ) -> None:
     """List or diff context snapshots (Phase 9)."""
     from contextpack.adaptive.snapshots import ContextSnapshotEngine
 
+    path = path or Path.cwd()
     db = path / ".contextpack" / "memory.db"
     engine = ContextSnapshotEngine(db)
 
     if diff:
         parts = diff.split(",")
         if len(parts) != 2:
-            console.print("[red]--diff requires two snapshot IDs: before_id,after_id[/red]")
+            msg = (
+                "[red]--diff requires two snapshot IDs: "
+                "before_id,after_id[/red]"
+            )
+            console.print(msg)
             raise typer.Exit(code=1)
         before = _run(engine.get(parts[0].strip()))
         after = _run(engine.get(parts[1].strip()))
         if not before or not after:
-            console.print("[red]One or both snapshot IDs not found.[/red]")
+            msg = "[red]One or both snapshot IDs not found.[/red]"
+            console.print(msg)
             raise typer.Exit(code=1)
         result = engine.diff(before, after)
         console.print(result.to_text())
@@ -531,9 +963,14 @@ def snapshots_cmd(
         console.print(f"\n[bold]Context Snapshots[/bold] ({len(snaps)})\n")
         import datetime
         for s in snaps:
-            dt = datetime.datetime.fromtimestamp(s.timestamp).strftime("%Y-%m-%d %H:%M")
+            dt = datetime.datetime.fromtimestamp(s.timestamp).strftime(
+                "%Y-%m-%d %H:%M"
+            )
             nodes = s.graph_state.get("nodes", "?")
-            console.print(f"[cyan]{s.snapshot_id}[/cyan]  {dt}  [{s.agent_id}]  nodes={nodes}  {s.task[:50]}")
+            console.print(
+                f"[cyan]{s.snapshot_id}[/cyan]  {dt}  [{s.agent_id}]  "
+                f"nodes={nodes}  {s.task[:50]}"
+            )
 
 
 if __name__ == "__main__":

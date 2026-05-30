@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextpack.core.config import get_settings
 from contextpack.core.protocols import LLMProvider
 from contextpack.llm.azure_foundry import AzureFoundryLLM
+from contextpack.llm.ollama import OllamaLLM
 from contextpack.llm.openai_direct import OpenAIDirectLLM
 
 
@@ -16,7 +17,9 @@ def get_llm_provider() -> LLMProvider:
         return AzureFoundryLLM()
     if provider == "openai":
         return OpenAIDirectLLM()
+    if provider == "ollama":
+        return OllamaLLM()
     raise ValueError(
         f"Unknown LLM provider: {provider}. "
-        "Use azure_foundry or openai, and set credentials in .env"
+        "Use azure_foundry, openai, or ollama, and set credentials in .env"
     )

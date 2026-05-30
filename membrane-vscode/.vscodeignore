@@ -1,0 +1,12 @@
+src/
+webview-src/
+node_modules/
+.git
+.gitignore
+tsconfig.json
+esbuild.mjs
+package-lock.json
+**/*.ts
+**/*.map
+*.vsix
+.DS_Store

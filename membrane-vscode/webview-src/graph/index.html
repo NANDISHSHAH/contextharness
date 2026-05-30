@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Membrane — Dependency Graph</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: #1e1e1e;
+        color: #e0e0e0;
+        overflow: hidden;
+      }
+
+      #graph-container {
+        width: 100%;
+        height: 100vh;
+        background: linear-gradient(135deg, #2d2d2d, #1e1e1e);
+      }
+
+      .controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 12px;
+        border-radius: 6px;
+        border: 1px solid #404040;
+        z-index: 100;
+      }
+
+      .control-group {
+        margin-bottom: 10px;
+      }
+
+      label {
+        display: block;
+        font-size: 12px;
+        margin-bottom: 4px;
+        color: #a0a0a0;
+      }
+
+      input,
+      select {
+        width: 100%;
+        padding: 6px 8px;
+        background: #1e1e1e;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        color: #e0e0e0;
+        font-size: 12px;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #1e90ff;
+        box-shadow: 0 0 4px rgba(30, 144, 255, 0.3);
+      }
+
+      .loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 30px;
+        border-radius: 8px;
+        border: 1px solid #404040;
+      }
+
+      .spinner {
+        border: 3px solid #404040;
+        border-top: 3px solid #1e90ff;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 10px;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="graph-container"></div>
+    <div class="controls">
+      <div class="control-group">
+        <label for="search">Search Nodes</label>
+        <input type="text" id="search" placeholder="Find symbol..." />
+      </div>
+      <div class="control-group">
+        <label for="filter">Filter</label>
+        <select id="filter">
+          <option value="all">All Nodes</option>
+          <option value="hubs">Hub Nodes Only</option>
+          <option value="modules">By Module</option>
+        </select>
+      </div>
+    </div>
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Loading dependency graph...</p>
+    </div>
+
+    <script src="cytoscape.min.js"></script>
+    <script src="../graph.js"></script>
+  </body>
+</html>

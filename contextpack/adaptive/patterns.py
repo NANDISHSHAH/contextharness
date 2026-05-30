@@ -1,7 +1,6 @@
 """Failure pattern memory — classify and store recurring skill failures."""
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 

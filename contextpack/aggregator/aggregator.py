@@ -56,7 +56,7 @@ class ContextAggregator:
     ) -> str:
         parts = [
             "<extra_instructions>",
-            f"# Agent Context Pack",
+            "# Agent Context Pack",
             f"**User query:** {query}",
             "",
         ]

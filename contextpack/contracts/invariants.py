@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import fnmatch
-import json
 import time
 from pathlib import Path
 
@@ -62,7 +61,7 @@ class InvariantConfig(BaseModel):
     invariants: list[ArchInvariant] = Field(default_factory=list)
 
     @classmethod
-    def load(cls, repo_path: Path) -> "InvariantConfig":
+    def load(cls, repo_path: Path) -> InvariantConfig:
         candidates = [
             repo_path / "invariants.yml",
             repo_path / ".contextpack" / "invariants.yml",
@@ -106,7 +105,10 @@ class InvariantGuard:
                         invariant_name=inv.name,
                         file_path="(graph-wide)",
                         violation_type="no_cycles",
-                        description=f"Circular dependency detected — violates '{inv.name}': {inv.description}",
+                        description=(
+                            f"Circular dependency detected — "
+                            f"violates '{inv.name}': {inv.description}"
+                        ),
                         severity=inv.severity,
                     )
                 )
@@ -158,9 +160,12 @@ class InvariantGuard:
         ]
         async with aiosqlite.connect(self._db_path) as db:
             await db.executemany(
-                """INSERT INTO invariant_violations
-                   (invariant_name, file_path, violation_type, description, severity, timestamp, diff_hash)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "INSERT INTO invariant_violations "
+                    "(invariant_name, file_path, violation_type, "
+                    "description, severity, timestamp, diff_hash) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)"
+                ),
                 rows,
             )
             await db.commit()

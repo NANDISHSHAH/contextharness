@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextpack.core.models import ContextPack, Relationship, SemanticChunk, Workflow
+from contextpack.core.models import ContextPack, SemanticChunk, Workflow
 from contextpack.graph.engine import ContextGraph
 from contextpack.retrieval.engine import HybridRetriever
 from contextpack.utils.tokens import estimate_tokens
@@ -22,7 +22,10 @@ class ContextCompiler:
         used_tokens = 0
 
         for chunk in ranked:
-            line = f"[{chunk.type}] {chunk.name} ({chunk.file_path}): {chunk.summary or chunk.content[:200]}"
+            summary = chunk.summary or chunk.content[:200]
+            line = (
+                f"[{chunk.type}] {chunk.name} ({chunk.file_path}): {summary}"
+            )
             cost = estimate_tokens(line)
             if used_tokens + cost > token_budget:
                 break

@@ -1,9 +1,14 @@
 """Semantic contract layer — contracts, invariants, negative patterns, intent preservation."""
-from contextpack.contracts.extractor import ContractExtractor, Contract
-from contextpack.contracts.registry import ContractRegistry
-from contextpack.contracts.invariants import InvariantGuard, ArchInvariant, InvariantViolation, InvariantConfig
+from contextpack.contracts.extractor import Contract, ContractExtractor
+from contextpack.contracts.invariants import (
+    ArchInvariant,
+    InvariantConfig,
+    InvariantGuard,
+    InvariantViolation,
+)
 from contextpack.contracts.negative import NegativeContextIndex, NegativePattern
-from contextpack.contracts.preserver import IntentPreserver, BehaviorInvariant, InvariantCheckResult
+from contextpack.contracts.preserver import BehaviorInvariant, IntentPreserver, InvariantCheckResult
+from contextpack.contracts.registry import ContractRegistry
 
 __all__ = [
     "ContractExtractor",

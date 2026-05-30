@@ -37,9 +37,15 @@ def build_orientation(repo: Path, *, query: str = "architecture") -> str:
     if not project.is_built():
         lines.extend(
             [
-                "_No graph yet. Use MCP `project_outline` after build, or ask the user to run `context build`._",
+                (
+                    "_No graph yet. Use MCP `project_outline` after build, "
+                    "or ask the user to run `context build`._"
+                ),
                 "",
-                "**Workflow:** For task-specific work, run `context harvest \"<task>\" .` or MCP `harvest_context`.",
+                (
+                    "**Workflow:** For task-specific work, run "
+                    "`context harvest \"<task>\" .` or MCP `harvest_context`."
+                ),
             ]
         )
         return "\n".join(lines)

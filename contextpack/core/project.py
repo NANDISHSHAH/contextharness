@@ -10,10 +10,9 @@ from pathlib import Path
 
 import structlog
 
-from contextpack.aggregator.aggregator import ContextAggregator
+from contextpack.adapters.azure_foundry import AzureFoundryAdapter
 from contextpack.compiler.chunking.engine import ChunkingEngine
 from contextpack.compiler.compiler import ContextCompiler
-from contextpack.adapters.azure_foundry import AzureFoundryAdapter
 from contextpack.core.config import get_settings
 from contextpack.core.models import AggregatedAgentContext, ChangeSet, ContextPack, ProjectMap
 from contextpack.core.protocols import LLMProvider
@@ -101,7 +100,13 @@ class Project:
         stats.files_scanned = len(project_map.files) + project_map.files_skipped
         stats.files_indexed = len(project_map.files)
         stats.files_skipped = project_map.files_skipped
-        _done("scan", f"[cyan]{stats.files_scanned:,}[/cyan] files  [yellow]{stats.files_skipped:,} skipped[/yellow]")
+        _done(
+            "scan",
+            (
+                f"[cyan]{stats.files_scanned:,}[/cyan] files  "
+                f"[yellow]{stats.files_skipped:,} skipped[/yellow]"
+            ),
+        )
 
         # ── parse ────────────────────────────────────────────────────────────
         _start("parse")
@@ -125,7 +130,13 @@ class Project:
         project_map.entities = entities
         stats.phase_times["parse"] = time.perf_counter() - t
         stats.entities = len(entities)
-        _done("parse", f"[blue]{stats.entities:,}[/blue] entities from [dim]{stats.files_indexed:,}[/dim] files")
+        _done(
+            "parse",
+            (
+                f"[blue]{stats.entities:,}[/blue] entities from "
+                f"[dim]{stats.files_indexed:,}[/dim] files"
+            ),
+        )
 
         # ── graph ────────────────────────────────────────────────────────────
         _start("graph")
@@ -151,7 +162,13 @@ class Project:
         stats.hub_entities = len(hub_names)
         stats.embed_count = len(to_embed)
         stats.store_only_count = len(to_store_only)
-        _done("graph", f"[magenta]{len(entities):,}[/magenta] nodes  [bright_magenta]{stats.hub_entities}[/bright_magenta] hubs")
+        _done(
+            "graph",
+            (
+                f"[magenta]{len(entities):,}[/magenta] nodes  "
+                f"[bright_magenta]{stats.hub_entities}[/bright_magenta] hubs"
+            ),
+        )
 
         # ── chunk ────────────────────────────────────────────────────────────
         _start("chunk")
@@ -161,7 +178,13 @@ class Project:
         stats.chunks = len(chunks)
         stats.estimated_tokens = sum(c.token_estimate for c in chunks)
         stats.phase_times["chunk"] = time.perf_counter() - t
-        _done("chunk", f"[yellow]{stats.chunks:,}[/yellow] chunks  [dim]~{stats.estimated_tokens:,} tokens[/dim]")
+        _done(
+            "chunk",
+            (
+                f"[yellow]{stats.chunks:,}[/yellow] chunks  "
+                f"[dim]~{stats.estimated_tokens:,} tokens[/dim]"
+            ),
+        )
 
         # ── embed ────────────────────────────────────────────────────────────
         _start("embed")
@@ -172,7 +195,13 @@ class Project:
         vector_store = get_vector_store(self._ctx_dir, self._settings.vector_store)
         vector_store.upsert_chunks(chunks, embeddings)
         stats.phase_times["embed"] = time.perf_counter() - t
-        _done("embed", f"[bright_green]{stats.embed_count:,}[/bright_green] embedded  [dim]{stats.store_only_count:,} store-only[/dim]")
+        _done(
+            "embed",
+            (
+                f"[bright_green]{stats.embed_count:,}[/bright_green] "
+                f"embedded  [dim]{stats.store_only_count:,} store-only[/dim]"
+            ),
+        )
 
         # ── store ────────────────────────────────────────────────────────────
         _start("store")
@@ -198,8 +227,8 @@ class Project:
         self._project_map = project_map
 
         # ── workflow extraction (Phase 5) ────────────────────────────────────
+        from contextpack.memory.store import compute_hashes, save_hashes
         from contextpack.workflows.extractor import extract_and_store
-        from contextpack.memory.store import save_hashes, compute_hashes
 
         t = time.perf_counter()
         try:
@@ -419,7 +448,9 @@ class Project:
         budget = token_budget or self._settings.default_token_budget
         return await self._compiler.compile(query, token_budget=budget)
 
-    async def harvest(self, query: str, *, branch_name: str | None = None) -> AggregatedAgentContext:
+    async def harvest(
+        self, query: str, *, branch_name: str | None = None
+    ) -> AggregatedAgentContext:
         """Complete agent context (meetup: harvest + aggregate all sources)."""
         project_map = self._load_project_map()
         compiled = await self.compile(query) if self._compiler else None
@@ -479,12 +510,12 @@ class Project:
         await db_store.initialize()
         return await db_store.list_workflows()
 
-    def agent_memory(self, agent_id: str = "default") -> "AgentMemory":  # type: ignore[name-defined]
+    def agent_memory(self, agent_id: str = "default") -> AgentMemory:  # type: ignore[name-defined]
         """Return an AgentMemory scoped to agent_id, backed by this project's DB."""
         from contextpack.skills import AgentMemory
         return AgentMemory(agent_id, self._ctx_dir / "memory.db")
 
-    def shared_memory(self) -> "SharedMemory":  # type: ignore[name-defined]
+    def shared_memory(self) -> SharedMemory:  # type: ignore[name-defined]
         """Return a SharedMemory view across all agents for this project."""
         from contextpack.skills import SharedMemory
         return SharedMemory(self._ctx_dir / "memory.db")

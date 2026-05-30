@@ -28,7 +28,11 @@ def _emit(payload: dict) -> None:
 def session_start(repo: Path | None = None) -> int:
     root = (repo or Path.cwd()).resolve()
     hook_in = _read_input()
-    query = str(hook_in.get("user_message", "") or hook_in.get("prompt", "") or "architecture")[:200]
+    query = str(
+        hook_in.get("user_message", "")
+        or hook_in.get("prompt", "")
+        or "architecture"
+    )[:200]
     context = build_orientation(root, query=query or "architecture")
     _emit({"additional_context": context})
     return 0

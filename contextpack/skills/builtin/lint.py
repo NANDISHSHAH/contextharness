@@ -21,7 +21,11 @@ class LintSkill:
             code, out, err = ret
             elapsed = (time.perf_counter() - t0) * 1000
             output = (out + err).strip()
-            findings = [l for l in output.splitlines() if l.strip() and ("error" in l.lower() or "E" in l)][:10]
+            findings = [
+                l
+                for l in output.splitlines()
+                if l.strip() and ("error" in l.lower() or "E" in l)
+            ][:10]
             return SkillResult(
                 skill=self.name,
                 passed=code == 0,
@@ -78,5 +82,5 @@ async def _cmd(
         )
     except FileNotFoundError:
         return None
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return None

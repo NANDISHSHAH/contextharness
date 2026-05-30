@@ -121,12 +121,12 @@ class SharedMemory:
 
 
 # ── Phase 6: Pre-Skill Engine ────────────────────────────────────────────────
-from contextpack.skills.manifest import SkillManifest, SkillPolicy, MatchCriteria, RequireSpec
-from contextpack.skills.router import SkillRouter, SkillPlan
-from contextpack.skills.composer import SkillComposer, SkillResult, SKILL_DAG
+from contextpack.skills.checkpoint import CheckpointResult, ReasoningCheckpoint
+from contextpack.skills.composer import SKILL_DAG, SkillComposer, SkillResult
 from contextpack.skills.enforcer import BlastRadiusEnforcer, DecompositionPlan, SubTask
-from contextpack.skills.checkpoint import ReasoningCheckpoint, CheckpointResult
 from contextpack.skills.evidence import EvidenceBundle, EvidenceStore
+from contextpack.skills.manifest import MatchCriteria, RequireSpec, SkillManifest, SkillPolicy
+from contextpack.skills.router import SkillPlan, SkillRouter
 from contextpack.skills.verifier import SkillVerifierLoop, VerifierResult
 
 __all__ = [

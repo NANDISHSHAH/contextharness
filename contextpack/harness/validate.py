@@ -107,7 +107,15 @@ def _public_hub_names(project_map: ProjectMap, graph: ContextGraph, limit: int =
         if name.startswith("_") or name in {"Project", "main", "app"}:
             continue
         et = type_by_name.get(name)
-        if et not in (EntityType.CLASS, EntityType.MODULE, EntityType.SERVICE, "class", "module", "service"):
+        valid_types = (
+            EntityType.CLASS,
+            EntityType.MODULE,
+            EntityType.SERVICE,
+            "class",
+            "module",
+            "service",
+        )
+        if et not in valid_types:
             continue
         out.add(name)
         if len(out) >= limit:
@@ -123,7 +131,11 @@ def validate_harness_docs(repo: Path) -> HarnessValidation:
 
     if not map_path.is_file():
         result.ok = False
-        result.warnings.append("No built index — run `context build` before validating harness docs.")
+        msg = (
+            "No built index — run `context build` before validating "
+            "harness docs."
+        )
+        result.warnings.append(msg)
         return result
 
     project_map = ProjectMap.model_validate_json(map_path.read_text(encoding="utf-8"))

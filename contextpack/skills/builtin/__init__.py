@@ -1,10 +1,10 @@
 """Built-in skill runner registry."""
 from __future__ import annotations
 
-from contextpack.skills.builtin.lint import LintSkill
-from contextpack.skills.builtin.type_check import TypeCheckSkill
-from contextpack.skills.builtin.security_scan import SecurityScanSkill
 from contextpack.skills.builtin.docs_link_check import DocsLinkCheckSkill
+from contextpack.skills.builtin.lint import LintSkill
+from contextpack.skills.builtin.security_scan import SecurityScanSkill
+from contextpack.skills.builtin.type_check import TypeCheckSkill
 
 _REGISTRY: dict[str, object] = {}
 

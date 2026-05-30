@@ -88,13 +88,26 @@ class SQLiteStore:
         ]
         async with aiosqlite.connect(self.db_path) as db:
             await db.executemany(
-                "INSERT OR REPLACE INTO entities (id, type, name, file_path, data) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "INSERT OR REPLACE INTO entities "
+                    "(id, type, name, file_path, data) "
+                    "VALUES (?, ?, ?, ?, ?)"
+                ),
                 payload,
             )
             await db.commit()
 
-    async def upsert_entity(self, entity_id: str, entity_type: str, name: str, file_path: str, data: dict) -> None:
-        await self.upsert_entities_batch([(entity_id, entity_type, name, file_path, data)])
+    async def upsert_entity(
+        self,
+        entity_id: str,
+        entity_type: str,
+        name: str,
+        file_path: str,
+        data: dict,
+    ) -> None:
+        await self.upsert_entities_batch(
+            [(entity_id, entity_type, name, file_path, data)]
+        )
 
     async def upsert_embeddings_batch(
         self,
@@ -157,9 +170,12 @@ class SQLiteStore:
     async def upsert_agent_fact(self, fact: dict) -> None:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
-                """INSERT OR REPLACE INTO agent_memory
-                   (fact_id, agent_id, fact_type, content, entity_ids, timestamp, confidence, metadata)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "INSERT OR REPLACE INTO agent_memory "
+                    "(fact_id, agent_id, fact_type, content, "
+                    "entity_ids, timestamp, confidence, metadata) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                ),
                 (
                     fact["fact_id"],
                     fact.get("agent_id", "default"),

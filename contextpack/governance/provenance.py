@@ -1,7 +1,6 @@
 """Context provenance chains — chain of custody per context chunk."""
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 
@@ -130,7 +129,10 @@ class ProvenanceChain:
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
-                "SELECT * FROM context_provenance WHERE trust_tier >= ? ORDER BY trust_score ASC LIMIT ?",
+                (
+                    "SELECT * FROM context_provenance WHERE trust_tier >= ? "
+                    "ORDER BY trust_score ASC LIMIT ?"
+                ),
                 (max_tier, limit),
             ) as cur:
                 rows = await cur.fetchall()

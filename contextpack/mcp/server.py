@@ -131,8 +131,6 @@ def run_server() -> None:
             rows = await p.recent_changes(limit=limit)
             if not rows:
                 return "No change log yet. Run `context watch` or `context build` to populate."
-            from contextpack.memory.store import format_changeset
-            from contextpack.core.models import ChangeSet, FileChange
 
             # Group by build_id, show most recent build's changes
             by_build: dict[str, list[dict]] = {}
@@ -304,7 +302,11 @@ def run_server() -> None:
             from contextpack.contracts.invariants import InvariantConfig, InvariantGuard
             config = InvariantConfig.load(root)
             if not config.invariants:
-                return "No invariants.yml found. Create .contextpack/invariants.yml to define rules."
+                msg = (
+                    "No invariants.yml found. "
+                    "Create .contextpack/invariants.yml to define rules."
+                )
+                return msg
             db = root / ".contextpack" / "memory.db"
             guard = InvariantGuard(db)
             # Build edges from changed files (simplified: just check imports in file)
