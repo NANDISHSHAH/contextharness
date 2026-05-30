@@ -35,7 +35,7 @@ __export(extension_exports, {
   getProviders: () => getProviders
 });
 module.exports = __toCommonJS(extension_exports);
-var vscode19 = __toESM(require("vscode"));
+var vscode25 = __toESM(require("vscode"));
 
 // src/python/detector.ts
 var path = __toESM(require("path"));
@@ -108,7 +108,14 @@ var COMMANDS = {
   refreshContextDebt: "membrane.refreshContextDebt",
   refreshSkillGates: "membrane.refreshSkillGates",
   refreshAgentLocks: "membrane.refreshAgentLocks",
-  refreshFailurePatterns: "membrane.refreshFailurePatterns"
+  refreshFailurePatterns: "membrane.refreshFailurePatterns",
+  trustShow: "membrane.trustShow",
+  playbookShow: "membrane.playbookShow",
+  refreshTrustScores: "membrane.refreshTrustScores",
+  refreshPlaybook: "membrane.refreshPlaybook",
+  showStatus: "membrane.showStatus",
+  harvestPanel: "membrane.harvestPanel",
+  runSkillGatesAll: "membrane.runSkillGatesAll"
 };
 var OUTPUT_CHANNEL = "Membrane";
 var MCP_SERVER_NAME = "context-harness";
@@ -237,34 +244,47 @@ var vscode2 = __toESM(require("vscode"));
 var path2 = __toESM(require("path"));
 var fs2 = __toESM(require("fs"));
 var import_child_process2 = require("child_process");
-async function installContextpack(uvPath, extensionPath, progress) {
+async function installContextpack(uvPath, extensionPath, workspaceRoot, progress) {
   const venv = getVenvPath();
   const pythonPath = getPythonPath(venv);
+  const localSourcePath = getLocalSourcePath(workspaceRoot);
   const wheelsDir = path2.join(extensionPath, "resources", "wheels");
   let actualWheelPath = null;
   if (fs2.existsSync(wheelsDir)) {
-    const files = fs2.readdirSync(wheelsDir);
-    const wheelFile = files.find((f) => f.endsWith(".whl"));
+    const files = fs2.readdirSync(wheelsDir).filter((f) => f.endsWith(".whl"));
+    const arch = process.arch === "arm64" ? "arm64" : "x86_64";
+    const platformTag = process.platform === "darwin" ? `macosx.*${arch}` : process.platform === "win32" ? "win" : "linux";
+    const platformMatch = files.find((f) => new RegExp(platformTag).test(f));
+    const wheelFile = platformMatch ?? files[0];
     if (wheelFile) {
       actualWheelPath = path2.join(wheelsDir, wheelFile);
+      log(`Found bundled wheel: ${wheelFile}`);
     }
   }
+  const venvCreated = !fs2.existsSync(pythonPath);
   try {
-    progress?.report({ message: "Creating venv..." });
-    log(`Creating venv at ${venv}`);
-    (0, import_child_process2.execSync)(`"${uvPath}" venv "${venv}"`, { stdio: "pipe", encoding: "utf-8" });
-    log("venv created successfully");
-    progress?.report({ message: "Installing contextpack...", increment: 50 });
-    let installCmd = "";
-    if (actualWheelPath) {
-      log(`Installing contextpack from bundled wheel: ${actualWheelPath}`);
-      installCmd = `"${pythonPath}" -m pip install "${actualWheelPath}[harness]" -v`;
+    if (venvCreated) {
+      progress?.report({ message: "Creating venv..." });
+      log(`Creating venv at ${venv}`);
+      (0, import_child_process2.execSync)(`"${uvPath}" venv "${venv}"`, { stdio: "pipe", encoding: "utf-8" });
+      log("venv created");
     } else {
-      log("No bundled wheel found, installing from PyPI...");
-      installCmd = `"${pythonPath}" -m pip install contextpack[harness] -v`;
+      log(`Reusing existing venv at ${venv}`);
+    }
+    progress?.report({ message: "Installing contextpack...", increment: 50 });
+    let installCmd;
+    if (localSourcePath) {
+      log(`Installing from local workspace source: ${localSourcePath}`);
+      installCmd = `"${uvPath}" pip install --python "${pythonPath}" "${localSourcePath}[harness]" -v`;
+    } else if (actualWheelPath) {
+      log(`Installing from bundled wheel: ${actualWheelPath}`);
+      installCmd = `"${uvPath}" pip install --python "${pythonPath}" "${actualWheelPath}[harness]" -v`;
+    } else {
+      log("No bundled wheel \u2014 installing from PyPI...");
+      installCmd = `"${uvPath}" pip install --python "${pythonPath}" "contextpack[harness]" -v`;
     }
     const output = (0, import_child_process2.execSync)(installCmd, { encoding: "utf-8", stdio: "pipe" });
-    log(`pip output: ${output}`);
+    log(`install output: ${output}`);
     progress?.report({ message: "Verifying installation...", increment: 25 });
     log("Verifying contextpack installation...");
     const verifyOutput = (0, import_child_process2.execSync)(`"${pythonPath}" -c "import contextpack; print('contextpack version:', contextpack.__version__)"`, {
@@ -277,17 +297,41 @@ async function installContextpack(uvPath, extensionPath, progress) {
     return true;
   } catch (error) {
     const errorMsg = error.stdout || error.stderr || error.message || String(error);
-    log(`\u274C Installation failed: ${errorMsg}`);
+    log(`Installation failed: ${errorMsg}`);
+    if (venvCreated && fs2.existsSync(venv)) {
+      try {
+        fs2.rmSync(venv, { recursive: true, force: true });
+        log("Rolled back partial venv after install failure");
+      } catch {
+        log("Warning: could not roll back venv");
+      }
+    }
     vscode2.window.showErrorMessage(
-      `Membrane installation failed.
-
-Error: ${errorMsg}
-
-Try manually installing:
-${pythonPath} -m pip install contextpack[harness]`
-    );
+      `Membrane: installation failed \u2014 ${errorMsg.slice(0, 120)}`,
+      "View Logs"
+    ).then((action) => {
+      if (action === "View Logs") {
+        vscode2.commands.executeCommand("workbench.action.output.toggleOutput");
+      }
+    });
     return false;
   }
+}
+function getLocalSourcePath(workspaceRoot) {
+  const pyprojectPath = path2.join(workspaceRoot, "pyproject.toml");
+  const packageInitPath = path2.join(workspaceRoot, "contextpack", "__init__.py");
+  if (!fs2.existsSync(pyprojectPath) || !fs2.existsSync(packageInitPath)) {
+    return null;
+  }
+  try {
+    const pyproject = fs2.readFileSync(pyprojectPath, "utf-8");
+    if (pyproject.includes('name = "contextpack"')) {
+      return workspaceRoot;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 function getPythonPath(venvPath) {
   if (process.platform === "win32") {
@@ -299,7 +343,19 @@ function getPythonPath(venvPath) {
 function isContextpackInstalled() {
   const venv = getVenvPath();
   const pythonPath = getPythonPath(venv);
-  return fs2.existsSync(pythonPath);
+  if (!fs2.existsSync(pythonPath)) {
+    return false;
+  }
+  try {
+    (0, import_child_process2.execSync)(`"${pythonPath}" -c "import contextpack"`, {
+      stdio: "pipe",
+      encoding: "utf-8",
+      timeout: 5e3
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // src/python/runner.ts
@@ -329,7 +385,7 @@ var ContextRunner = class {
    */
   async run(args, opts) {
     return new Promise((resolve) => {
-      const env = {
+      const env2 = {
         ...process.env,
         ...this.envVars,
         ...opts?.env,
@@ -356,7 +412,7 @@ var ContextRunner = class {
         cmdArgs,
         {
           cwd: opts?.cwd || this.workspaceRoot,
-          env,
+          env: env2,
           maxBuffer: 10 * 1024 * 1024
           // 10MB
         },
@@ -400,7 +456,7 @@ var ContextRunner = class {
    * Spawn a long-running process (watcher, MCP server, etc).
    */
   spawn(args, opts) {
-    const env = {
+    const env2 = {
       ...process.env,
       ...this.envVars,
       ...opts?.env,
@@ -419,7 +475,7 @@ var ContextRunner = class {
     }
     return (0, import_child_process3.spawn)(command, cmdArgs, {
       cwd: opts?.cwd || this.workspaceRoot,
-      env,
+      env: env2,
       stdio: ["pipe", "pipe", "pipe"]
     });
   }
@@ -427,7 +483,7 @@ var ContextRunner = class {
    * Spawn MCP server process.
    */
   spawnMcpServer(opts) {
-    const env = {
+    const env2 = {
       ...process.env,
       ...this.envVars,
       ...opts?.env,
@@ -446,7 +502,7 @@ var ContextRunner = class {
     }
     return (0, import_child_process3.spawn)(command, cmdArgs, {
       cwd: opts?.cwd || this.workspaceRoot,
-      env,
+      env: env2,
       stdio: ["pipe", "pipe", "pipe"]
     });
   }
@@ -497,8 +553,8 @@ function isContextpackInitialized() {
     return false;
   }
   try {
-    const fs8 = require("fs");
-    return fs8.existsSync(configPath);
+    const fs10 = require("fs");
+    return fs10.existsSync(configPath);
   } catch {
     return false;
   }
@@ -507,54 +563,54 @@ function isContextpackInitialized() {
 // src/utils/config.ts
 async function buildEnvVars(secretStorage) {
   const config = vscode4.workspace.getConfiguration();
-  const env = {
+  const env2 = {
     ...process.env
   };
   const workspaceRoot = getWorkspaceRoot();
   if (workspaceRoot) {
-    env[ENV_VARS.CONTEXTPACK_ROOT] = workspaceRoot;
+    env2[ENV_VARS.CONTEXTPACK_ROOT] = workspaceRoot;
   }
   const embeddingProvider = config.get(SETTINGS.embeddingProvider) || "hash";
-  env[ENV_VARS.CONTEXTPACK_EMBEDDING_PROVIDER] = embeddingProvider;
+  env2[ENV_VARS.CONTEXTPACK_EMBEDDING_PROVIDER] = embeddingProvider;
   const llmProvider = config.get(SETTINGS.llmProvider);
   if (llmProvider) {
-    env[ENV_VARS.CONTEXTPACK_LLM_PROVIDER] = llmProvider;
+    env2[ENV_VARS.CONTEXTPACK_LLM_PROVIDER] = llmProvider;
   }
   const openaiKey = await secretStorage.get("membrane.openaiApiKey");
   if (openaiKey) {
-    env[ENV_VARS.OPENAI_API_KEY] = openaiKey;
+    env2[ENV_VARS.OPENAI_API_KEY] = openaiKey;
   }
   const azureEndpoint = config.get(SETTINGS.azureEndpoint);
   if (azureEndpoint) {
-    env[ENV_VARS.AZURE_OPENAI_ENDPOINT] = azureEndpoint;
+    env2[ENV_VARS.AZURE_OPENAI_ENDPOINT] = azureEndpoint;
   }
   const azureKey = await secretStorage.get("membrane.azureApiKey");
   if (azureKey) {
-    env[ENV_VARS.AZURE_OPENAI_API_KEY] = azureKey;
+    env2[ENV_VARS.AZURE_OPENAI_API_KEY] = azureKey;
   }
   const azureDeployment = config.get(SETTINGS.azureDeployment);
   if (azureDeployment) {
-    env[ENV_VARS.AZURE_OPENAI_DEPLOYMENT] = azureDeployment;
+    env2[ENV_VARS.AZURE_OPENAI_DEPLOYMENT] = azureDeployment;
   }
   const azureEmbeddingDeploy = config.get(SETTINGS.azureEmbeddingDeployment);
   if (azureEmbeddingDeploy) {
-    env[ENV_VARS.AZURE_OPENAI_EMBEDDING_DEPLOYMENT] = azureEmbeddingDeploy;
+    env2[ENV_VARS.AZURE_OPENAI_EMBEDDING_DEPLOYMENT] = azureEmbeddingDeploy;
   }
   const jiraUrl = config.get(SETTINGS.jiraBaseUrl);
   if (jiraUrl) {
-    env[ENV_VARS.JIRA_BASE_URL] = jiraUrl;
+    env2[ENV_VARS.JIRA_BASE_URL] = jiraUrl;
   }
   const jiraEmail = config.get(SETTINGS.jiraEmail);
   if (jiraEmail) {
-    env[ENV_VARS.JIRA_EMAIL] = jiraEmail;
+    env2[ENV_VARS.JIRA_EMAIL] = jiraEmail;
   }
   const jiraToken = await secretStorage.get("membrane.jiraApiToken");
   if (jiraToken) {
-    env[ENV_VARS.JIRA_API_TOKEN] = jiraToken;
+    env2[ENV_VARS.JIRA_API_TOKEN] = jiraToken;
   }
   const maxEmbedEntities = config.get(SETTINGS.maxEmbedEntities);
   if (maxEmbedEntities) {
-    env[ENV_VARS.CONTEXTPACK_MAX_EMBED_ENTITIES] = String(maxEmbedEntities);
+    env2[ENV_VARS.CONTEXTPACK_MAX_EMBED_ENTITIES] = String(maxEmbedEntities);
   }
   if (workspaceRoot) {
     const envFilePath = path4.join(workspaceRoot, ".env");
@@ -574,7 +630,7 @@ async function buildEnvVars(secretStorage) {
               value = value.slice(1, -1);
             }
             if (key && value) {
-              env[key] = value;
+              env2[key] = value;
               loadedCount++;
               loadedKeys.push(key);
             }
@@ -586,7 +642,7 @@ async function buildEnvVars(secretStorage) {
       log(`No .env file found at ${envFilePath}`);
     }
   }
-  return env;
+  return env2;
 }
 
 // src/mcp/manager.ts
@@ -766,247 +822,48 @@ var McpServerManager = class {
 };
 
 // src/build/buildService.ts
-var vscode7 = __toESM(require("vscode"));
-
-// src/build/statusBar.ts
 var vscode6 = __toESM(require("vscode"));
-var fs6 = __toESM(require("fs"));
-var path6 = __toESM(require("path"));
-var StatusBarManager = class {
-  buildStatusItem;
-  stalenessItem;
-  agentLocksItem;
-  currentBuildStatus = {
-    state: "idle",
-    message: "Membrane"
-  };
-  constructor() {
-    this.buildStatusItem = vscode6.window.createStatusBarItem(
-      vscode6.StatusBarAlignment.Left,
-      100
-    );
-    this.buildStatusItem.command = COMMANDS.build;
-    this.updateBuildStatus();
-    this.stalenessItem = vscode6.window.createStatusBarItem(
-      vscode6.StatusBarAlignment.Left,
-      99
-    );
-    this.stalenessItem.command = COMMANDS.debtReport;
-    this.updateStaleness();
-    this.agentLocksItem = vscode6.window.createStatusBarItem(
-      vscode6.StatusBarAlignment.Left,
-      98
-    );
-    this.agentLocksItem.command = COMMANDS.locksShow;
-    this.updateAgentLocks();
-    this.buildStatusItem.show();
-    this.stalenessItem.show();
-    this.agentLocksItem.show();
-  }
-  updateBuildStatus(status) {
-    if (status) {
-      this.currentBuildStatus = status;
-    }
-    const { state, message } = this.currentBuildStatus;
-    let icon = "$(check)";
-    let color = void 0;
-    if (state === "building") {
-      icon = "$(loading~spin)";
-    } else if (state === "stale") {
-      icon = "$(warning)";
-      color = "statusBarItem.warningBackground";
-    } else if (state === "error") {
-      icon = "$(error)";
-      color = "statusBarItem.errorBackground";
-    }
-    this.buildStatusItem.text = `${icon} ${BRAND.shortName}: ${message}`;
-    if (color) {
-      this.buildStatusItem.backgroundColor = new vscode6.ThemeColor(color);
-    } else {
-      this.buildStatusItem.backgroundColor = void 0;
-    }
-  }
-  updateStaleness() {
-    const contextpackDir = getContextpackDir();
-    if (!contextpackDir) {
-      this.stalenessItem.text = "$(clock) No workspace";
-      return;
-    }
-    const configPath = path6.join(contextpackDir, "config.json");
-    if (!fs6.existsSync(configPath)) {
-      this.stalenessItem.text = "$(clock) Not initialized";
-      return;
-    }
-    try {
-      const config = JSON.parse(fs6.readFileSync(configPath, "utf-8"));
-      const lastBuildTime = config.built_at ? new Date(config.built_at).getTime() : Date.now();
-      const now = Date.now();
-      const diff = now - lastBuildTime;
-      const hours = Math.floor(diff / (1e3 * 60 * 60));
-      const minutes = Math.floor(diff % (1e3 * 60 * 60) / (1e3 * 60));
-      let timeStr;
-      if (hours > 24) {
-        timeStr = `${Math.floor(hours / 24)}d ago`;
-      } else if (hours > 0) {
-        timeStr = `${hours}h ago`;
-      } else if (minutes > 0) {
-        timeStr = `${minutes}m ago`;
-      } else {
-        timeStr = "now";
-      }
-      this.stalenessItem.text = `$(clock) ${timeStr}`;
-    } catch (error) {
-      log(`Failed to read config.json: ${error}`);
-      this.stalenessItem.text = "$(clock) Error reading config";
-    }
-  }
-  updateAgentLocks(count = 0) {
-    if (count === 0) {
-      this.agentLocksItem.text = "$(person) 0 agents";
-    } else if (count === 1) {
-      this.agentLocksItem.text = "$(person) 1 agent";
-    } else {
-      this.agentLocksItem.text = `$(person) ${count} agents`;
-    }
-  }
-  dispose() {
-    this.buildStatusItem.dispose();
-    this.stalenessItem.dispose();
-    this.agentLocksItem.dispose();
-  }
-};
-
-// src/build/buildService.ts
 var BuildService = class {
   constructor(workspaceRoot, runner) {
     this.workspaceRoot = workspaceRoot;
     this.runner = runner;
-    this.statusBar = new StatusBarManager();
   }
-  isBuilding = false;
-  statusBar;
-  /**
-   * Full build of the index.
-   */
-  async build(showProgress = true) {
-    if (this.isBuilding) {
-      vscode7.window.showInformationMessage("Membrane: Build already in progress");
-      return false;
-    }
-    this.isBuilding = true;
-    this.statusBar.updateBuildStatus({ state: "building", message: "Building..." });
-    try {
-      if (showProgress) {
-        return await vscode7.window.withProgress(
-          {
-            location: vscode7.ProgressLocation.Notification,
-            title: "Membrane: Building index",
-            cancellable: true
-          },
-          async (progress) => {
-            return await this._buildWithProgress(progress);
-          }
-        );
-      } else {
-        const result = await this.runner.run(["build", "."]);
-        return result.exitCode === 0;
+  async build() {
+    log("Starting full build...");
+    const result = await vscode6.window.withProgress(
+      {
+        location: vscode6.ProgressLocation.Notification,
+        title: `${BRAND.name}: Building index...`,
+        cancellable: false
+      },
+      async (progress) => {
+        progress.report({ message: "Scanning codebase..." });
+        return this.runner.run(["build"], { timeout: 3e5 });
       }
-    } finally {
-      this.isBuilding = false;
-      this.statusBar.updateStaleness();
+    );
+    if (result.exitCode === 0) {
+      log("Build complete");
+      return true;
     }
+    log(`Build failed: ${result.stderr}`);
+    return false;
   }
-  async _buildWithProgress(progress) {
-    return new Promise((resolve) => {
-      log("Starting build with progress tracking");
-      const proc = this.runner.spawn(["build", "."]);
-      let stdout = "";
-      let stderr = "";
-      let completed = false;
-      let processExited = false;
-      const buildTimeout = setTimeout(() => {
-        if (!processExited) {
-          log("\u26A0\uFE0F Build timeout - killing process");
-          proc.kill();
-          this.isBuilding = false;
-          this.statusBar.updateBuildStatus({ state: "error", message: "Build timeout" });
-          vscode7.window.showErrorMessage(
-            "Membrane: Build timed out after 5 minutes. The process may be stuck."
-          );
-          resolve(false);
-        }
-      }, 3e5);
-      proc.stdout?.on("data", (data) => {
-        const text = data.toString();
-        stdout += text;
-        log(text.trim());
-        if (text.includes("scan")) {
-          progress.report({ message: "Scanning files...", increment: 10 });
-        } else if (text.includes("parse")) {
-          progress.report({ message: "Parsing code...", increment: 20 });
-        } else if (text.includes("graph")) {
-          progress.report({ message: "Building graph...", increment: 20 });
-        } else if (text.includes("chunk")) {
-          progress.report({ message: "Chunking content...", increment: 20 });
-        } else if (text.includes("embed")) {
-          progress.report({ message: "Embedding entities...", increment: 15 });
-        } else if (text.includes("store")) {
-          progress.report({ message: "Storing to database...", increment: 15 });
-        }
-        if (text.includes("Build complete") || text.includes("total")) {
-          completed = true;
-          progress.report({ message: "Build complete", increment: 0 });
-        }
-      });
-      proc.stderr?.on("data", (data) => {
-        const text = data.toString();
-        stderr += text;
-        if (text.trim()) {
-          log(`[stderr] ${text.trim()}`);
-        }
-      });
-      proc.on("exit", (code) => {
-        clearTimeout(buildTimeout);
-        processExited = true;
-        log(`Build process exited with code: ${code}`);
-        if (code === 0) {
-          log("\u2705 Build succeeded");
-          this.statusBar.updateBuildStatus({ state: "ready", message: "Ready" });
-          resolve(true);
-        } else {
-          log(`\u274C Build failed with code ${code}`);
-          this.statusBar.updateBuildStatus({ state: "error", message: "Build failed" });
-          vscode7.window.showErrorMessage(
-            `Membrane: Build failed with code ${code}. Check output for details.`
-          );
-          resolve(false);
-        }
-      });
-      proc.on("error", (error) => {
-        clearTimeout(buildTimeout);
-        log(`\u274C Build process error: ${error.message}`);
-        this.statusBar.updateBuildStatus({ state: "error", message: "Build error" });
-        vscode7.window.showErrorMessage(`Membrane: Build process error - ${error.message}`);
-        resolve(false);
-      });
-    });
-  }
-  /**
-   * Incremental build (for file watcher).
-   */
   async incrementalBuild() {
-    return this.build(false);
-  }
-  getStatusBar() {
-    return this.statusBar;
+    log("Starting incremental build...");
+    const result = await this.runner.run(["build", "--incremental"], { timeout: 12e4 });
+    if (result.exitCode === 0) {
+      log("Incremental build complete");
+      return true;
+    }
+    log(`Incremental build failed: ${result.stderr}`);
+    return false;
   }
   dispose() {
-    this.statusBar.dispose();
   }
 };
 
 // src/watcher/fileWatcher.ts
-var vscode8 = __toESM(require("vscode"));
+var vscode7 = __toESM(require("vscode"));
 var FileWatcherManager = class {
   constructor(workspaceRoot, buildService2) {
     this.workspaceRoot = workspaceRoot;
@@ -1023,17 +880,17 @@ var FileWatcherManager = class {
     if (this.isWatching || this.watcher) {
       return;
     }
-    const autoWatch = vscode8.workspace.getConfiguration().get(SETTINGS.autoWatch, true);
+    const autoWatch = vscode7.workspace.getConfiguration().get(SETTINGS.autoWatch, true);
     if (!autoWatch) {
       log("File watcher disabled in settings");
       return;
     }
     log("Starting file watcher (excluding .contextpack, node_modules, .git)");
-    const pattern = new vscode8.RelativePattern(
+    const pattern = new vscode7.RelativePattern(
       this.workspaceRoot,
       "**/*.{py,ts,tsx,js,jsx,md,yaml,yml,json}"
     );
-    this.watcher = vscode8.workspace.createFileSystemWatcher(pattern, true, false, true);
+    this.watcher = vscode7.workspace.createFileSystemWatcher(pattern, true, false, true);
     this.watcher.onDidChange((uri) => {
       if (uri.fsPath.includes(".contextpack") || uri.fsPath.includes(".mcp.json") || uri.fsPath.includes("node_modules") || uri.fsPath.includes(".git")) {
         return;
@@ -1092,7 +949,7 @@ var FileWatcherManager = class {
 };
 
 // src/commands/buildCommands.ts
-var vscode9 = __toESM(require("vscode"));
+var vscode8 = __toESM(require("vscode"));
 function registerBuildCommands(context, buildService2, fileWatcher2, providers) {
   const refreshProviders = async () => {
     try {
@@ -1106,45 +963,151 @@ function registerBuildCommands(context, buildService2, fileWatcher2, providers) 
         await providers.agentLocks.refresh?.();
       if (providers?.failurePatterns)
         await providers.failurePatterns.refresh?.();
+      if (providers?.trustScores)
+        await providers.trustScores.refresh?.();
+      if (providers?.playbook)
+        await providers.playbook.refresh?.();
     } catch (error) {
       log(`Error refreshing providers: ${error}`);
     }
   };
   context.subscriptions.push(
-    vscode9.commands.registerCommand(COMMANDS.build, async () => {
+    vscode8.commands.registerCommand(COMMANDS.build, async () => {
       log("Command: build");
       const success = await buildService2.build();
       if (success) {
         await refreshProviders();
-        vscode9.window.showInformationMessage("Membrane: Build completed");
+        vscode8.window.showInformationMessage("Membrane: Build completed");
       } else {
-        vscode9.window.showErrorMessage("Membrane: Build failed");
+        vscode8.window.showErrorMessage("Membrane: Build failed");
       }
     })
   );
   context.subscriptions.push(
-    vscode9.commands.registerCommand(COMMANDS.incrementalBuild, async () => {
+    vscode8.commands.registerCommand(COMMANDS.incrementalBuild, async () => {
       log("Command: incremental build");
       const success = await buildService2.incrementalBuild();
       if (success) {
         await refreshProviders();
       } else {
-        vscode9.window.showErrorMessage("Membrane: Incremental build failed");
+        vscode8.window.showErrorMessage("Membrane: Incremental build failed");
       }
     })
   );
   context.subscriptions.push(
-    vscode9.commands.registerCommand(COMMANDS.watch, async () => {
+    vscode8.commands.registerCommand(COMMANDS.watch, async () => {
       log("Command: toggle watch");
       fileWatcher2.toggle();
       const status = fileWatcher2.isActive() ? "enabled" : "disabled";
-      vscode9.window.showInformationMessage(`Membrane: File watcher ${status}`);
+      vscode8.window.showInformationMessage(`Membrane: File watcher ${status}`);
     })
   );
 }
 
 // src/commands/harvestCommands.ts
 var vscode10 = __toESM(require("vscode"));
+
+// src/panels/HarvestPanel.ts
+var vscode9 = __toESM(require("vscode"));
+var fs6 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
+var HarvestPanel = class _HarvestPanel {
+  constructor(panel, context, runner) {
+    this.context = context;
+    this.runner = runner;
+    this.panel = panel;
+    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+    this.panel.webview.onDidReceiveMessage(
+      (msg) => this.handleMessage(msg),
+      null,
+      this.disposables
+    );
+  }
+  static currentPanel;
+  panel;
+  disposables = [];
+  static show(context, runner) {
+    if (_HarvestPanel.currentPanel) {
+      _HarvestPanel.currentPanel.panel.reveal(vscode9.ViewColumn.Two);
+      return;
+    }
+    const panel = vscode9.window.createWebviewPanel(
+      "membrane.harvest",
+      "Membrane: Harvest Context",
+      vscode9.ViewColumn.Two,
+      {
+        enableScripts: true,
+        localResourceRoots: [vscode9.Uri.joinPath(context.extensionUri, "out")],
+        retainContextWhenHidden: true
+      }
+    );
+    const instance = new _HarvestPanel(panel, context, runner);
+    instance.panel.webview.html = instance.buildHtml();
+    _HarvestPanel.currentPanel = instance;
+  }
+  buildHtml() {
+    const htmlPath = path6.join(
+      this.context.extensionPath,
+      "webview-src",
+      "harvest",
+      "index.html"
+    );
+    const scriptUri = this.panel.webview.asWebviewUri(
+      vscode9.Uri.joinPath(this.context.extensionUri, "out", "webview-harvest.js")
+    );
+    let html = fs6.readFileSync(htmlPath, "utf-8");
+    html = html.replace(/<script src="\.\.\/harvest\.js"><\/script>/, `<script src="${scriptUri}"></script>`);
+    return html;
+  }
+  send(msg) {
+    this.panel.webview.postMessage(msg);
+  }
+  async handleMessage(msg) {
+    switch (msg.type) {
+      case "harvest": {
+        const query = msg.query ?? "";
+        const branch = msg.branch ?? "";
+        if (!query.trim()) {
+          this.send({ type: "error", message: "Please enter a query" });
+          return;
+        }
+        log(`Harvesting context for: "${query}"`);
+        this.send({ type: "loading" });
+        try {
+          const args = branch ? ["harvest", query, "--branch", branch] : ["harvest", query];
+          const result = await this.runner.run(args, { timeout: 12e4 });
+          if (result.exitCode === 0) {
+            this.send({ type: "harvestResult", content: result.stdout || "(no context returned)" });
+          } else {
+            this.send({ type: "harvestError", error: result.stderr || "Harvest failed" });
+          }
+        } catch (err) {
+          this.send({ type: "harvestError", error: err.message });
+        }
+        break;
+      }
+      case "openInEditor": {
+        const content = msg.content ?? "";
+        const doc = await vscode9.workspace.openTextDocument({
+          content: `# Harvested Context
+
+${content}`,
+          language: "markdown"
+        });
+        vscode9.window.showTextDocument(doc, { preview: true, viewColumn: vscode9.ViewColumn.One });
+        break;
+      }
+    }
+  }
+  dispose() {
+    _HarvestPanel.currentPanel = void 0;
+    this.panel.dispose();
+    this.disposables.forEach((d) => d.dispose());
+    this.disposables = [];
+  }
+};
+
+// src/commands/harvestCommands.ts
 async function showAsMarkdownDoc(content, title) {
   const doc = await vscode10.workspace.openTextDocument({
     content: `# ${title}
@@ -1157,34 +1120,11 @@ ${content}`,
     viewColumn: vscode10.ViewColumn.Beside
   });
 }
-function registerHarvestCommands(context, runner) {
+function registerHarvestCommands(context, runner, extensionUri) {
   context.subscriptions.push(
-    vscode10.commands.registerCommand(COMMANDS.harvest, async () => {
-      log("Command: harvest");
-      const query = await vscode10.window.showInputBox({
-        prompt: "Enter query for context harvesting",
-        placeHolder: 'e.g., "authentication flow"'
-      });
-      if (!query) {
-        return;
-      }
-      showOutput();
-      log(`Harvesting context for: "${query}"`);
-      const result = await vscode10.window.withProgress(
-        {
-          location: vscode10.ProgressLocation.Notification,
-          title: `Membrane: Harvesting context for "${query}"`,
-          cancellable: false
-        },
-        async () => runner.run(["harvest", query])
-      );
-      if (result.exitCode === 0) {
-        log(result.stdout);
-        await showAsMarkdownDoc(result.stdout || "_no context returned_", `Harvest: ${query}`);
-      } else {
-        log(`Harvest failed: ${result.stderr}`);
-        vscode10.window.showErrorMessage(`Membrane: Harvest failed \u2014 ${result.stderr || "unknown error"}`);
-      }
+    vscode10.commands.registerCommand(COMMANDS.harvest, () => {
+      log("Command: harvest (WebView)");
+      HarvestPanel.show(context, runner);
     })
   );
   context.subscriptions.push(
@@ -1388,11 +1328,55 @@ function registerGovernanceCommands(context, runner) {
     vscode12.commands.registerCommand(COMMANDS.couplingTrend, async () => {
       log("Command: coupling trend");
       showOutput();
-      const result = await runner.run(["coupling", "trend"]);
+      const result = await runner.runJson(["coupling", "--json"]);
+      if (!result || typeof result !== "object") {
+        log("Coupling trend: no data yet \u2014 run builds to accumulate metrics.");
+        return;
+      }
+      const r = result;
+      const lines = ["## Coupling Trend"];
+      if (r.latest) {
+        lines.push(
+          `Latest graph: ${r.latest.edge_count} edges / ${r.latest.node_count} nodes | ${r.latest.hub_count} hubs | ${r.latest.cycle_count} cycles`,
+          `Avg coupling: ${r.latest.avg_coupling.toFixed(4)}`
+        );
+      }
+      lines.push(
+        `30d change: ${r.coupling_change_pct >= 0 ? "+" : ""}${r.coupling_change_pct}%`,
+        `Hub change: ${r.hub_change >= 0 ? "+" : ""}${r.hub_change}`,
+        `Cycle change: ${r.cycle_change >= 0 ? "+" : ""}${r.cycle_change}`,
+        `Snapshots recorded: ${r.snapshot_count}`
+      );
+      if (r.is_decaying) {
+        lines.push("", `\u{1F6A8} DECAY ALERT: ${r.alert_message}`);
+      }
+      if (r.hotspot_modules.length > 0) {
+        lines.push("", `Hotspot modules: ${r.hotspot_modules.slice(0, 5).join(", ")}`);
+      }
+      log(lines.join("\n"));
+    })
+  );
+  context.subscriptions.push(
+    vscode12.commands.registerCommand(COMMANDS.trustShow, async () => {
+      log("Command: show trust scores");
+      showOutput();
+      const result = await runner.run(["trust"]);
       if (result.exitCode === 0) {
         log(result.stdout);
       } else {
-        log(`Coupling trend failed: ${result.stderr}`);
+        log(`Trust scores failed: ${result.stderr}`);
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode12.commands.registerCommand(COMMANDS.playbookShow, async () => {
+      log("Command: show playbook proposals");
+      showOutput();
+      const result = await runner.run(["playbook"]);
+      if (result.exitCode === 0) {
+        log(result.stdout);
+      } else {
+        log(`Playbook proposals failed: ${result.stderr}`);
       }
     })
   );
@@ -1443,8 +1427,84 @@ function registerSetupCommands(context, runner) {
   );
 }
 
-// src/providers/symbolExplorerProvider.ts
+// src/statusBar.ts
 var vscode14 = __toESM(require("vscode"));
+var STATE_CONFIG = {
+  initializing: { icon: "$(sync~spin)", label: "Starting..." },
+  building: { icon: "$(sync~spin)", label: "Building..." },
+  ready: { icon: "$(check)", label: "Ready" },
+  error: { icon: "$(error)", label: "Error" },
+  disabled: { icon: "$(circle-slash)", label: "Disabled" }
+};
+var StatusBarManager = class {
+  stateItem;
+  conflictItem;
+  _state = "initializing";
+  conflictInterval;
+  constructor() {
+    this.stateItem = vscode14.window.createStatusBarItem(
+      vscode14.StatusBarAlignment.Left,
+      10
+    );
+    this.stateItem.command = "membrane.showStatus";
+    this.conflictItem = vscode14.window.createStatusBarItem(
+      vscode14.StatusBarAlignment.Left,
+      9
+    );
+    this.conflictItem.command = "membrane.locksShow";
+    this.setState("initializing");
+    this.stateItem.show();
+  }
+  setState(state, detail) {
+    this._state = state;
+    const cfg = STATE_CONFIG[state];
+    const suffix = detail ? ` \u2014 ${detail.slice(0, 35)}` : "";
+    this.stateItem.text = `${cfg.icon} ${BRAND.shortName}: ${cfg.label}${suffix}`;
+    this.stateItem.tooltip = state === "error" ? `${BRAND.name}: ${detail || "Unknown error"} \u2014 click for options` : `${BRAND.name} \u2014 ${cfg.label}`;
+    this.stateItem.backgroundColor = state === "error" ? new vscode14.ThemeColor("statusBarItem.errorBackground") : void 0;
+  }
+  setConflicts(count) {
+    if (count === 0) {
+      this.conflictItem.hide();
+      return;
+    }
+    this.conflictItem.text = `$(warning) ${count} Agent Conflict${count > 1 ? "s" : ""}`;
+    this.conflictItem.tooltip = `${count} agent lock conflict(s) \u2014 click to review`;
+    this.conflictItem.backgroundColor = new vscode14.ThemeColor(
+      "statusBarItem.warningBackground"
+    );
+    this.conflictItem.show();
+  }
+  startConflictPolling(pollFn, intervalMs = 3e4) {
+    this.stopConflictPolling();
+    const run = async () => {
+      try {
+        const count = await pollFn();
+        this.setConflicts(count);
+      } catch {
+      }
+    };
+    run();
+    this.conflictInterval = setInterval(run, intervalMs);
+  }
+  stopConflictPolling() {
+    if (this.conflictInterval) {
+      clearInterval(this.conflictInterval);
+      this.conflictInterval = void 0;
+    }
+  }
+  get state() {
+    return this._state;
+  }
+  dispose() {
+    this.stopConflictPolling();
+    this.stateItem.dispose();
+    this.conflictItem.dispose();
+  }
+};
+
+// src/providers/symbolExplorerProvider.ts
+var vscode15 = __toESM(require("vscode"));
 var fs7 = __toESM(require("fs"));
 var path7 = __toESM(require("path"));
 var TYPE_ICONS = {
@@ -1458,7 +1518,7 @@ var TYPE_ICONS = {
   file: "symbol-file",
   service: "symbol-property"
 };
-var SymbolTreeItem = class extends vscode14.TreeItem {
+var SymbolTreeItem = class extends vscode15.TreeItem {
   constructor(label, collapsibleState, entity, filePath, isFile, fileEntityCount) {
     super(label, collapsibleState);
     this.entity = entity;
@@ -1468,24 +1528,24 @@ var SymbolTreeItem = class extends vscode14.TreeItem {
     if (entity && filePath) {
       this.tooltip = entity.docstring || `${entity.type} ${entity.name} at ${path7.basename(filePath)}:${entity.line_start}`;
       this.description = `${entity.type} \xB7 L${entity.line_start}`;
-      this.iconPath = new vscode14.ThemeIcon(TYPE_ICONS[entity.type] || "symbol-misc");
+      this.iconPath = new vscode15.ThemeIcon(TYPE_ICONS[entity.type] || "symbol-misc");
       const absolutePath = filePath.startsWith("/") ? filePath : path7.join(getWorkspaceRoot() || "", filePath);
       this.command = {
         command: "vscode.open",
         title: "Open File",
         arguments: [
-          vscode14.Uri.file(absolutePath),
+          vscode15.Uri.file(absolutePath),
           {
-            selection: new vscode14.Range(
-              new vscode14.Position(Math.max(0, entity.line_start - 1), 0),
-              new vscode14.Position(Math.max(0, entity.line_start - 1), 0)
+            selection: new vscode15.Range(
+              new vscode15.Position(Math.max(0, entity.line_start - 1), 0),
+              new vscode15.Position(Math.max(0, entity.line_start - 1), 0)
             )
           }
         ]
       };
     } else if (isFile && filePath) {
-      this.iconPath = vscode14.ThemeIcon.File;
-      this.resourceUri = vscode14.Uri.file(
+      this.iconPath = vscode15.ThemeIcon.File;
+      this.resourceUri = vscode15.Uri.file(
         path7.join(getWorkspaceRoot() || "", filePath)
       );
       if (typeof fileEntityCount === "number") {
@@ -1495,7 +1555,7 @@ var SymbolTreeItem = class extends vscode14.TreeItem {
   }
 };
 var SymbolExplorerProvider = class {
-  _onDidChangeTreeData = new vscode14.EventEmitter();
+  _onDidChangeTreeData = new vscode15.EventEmitter();
   onDidChangeTreeData = this._onDidChangeTreeData.event;
   projectMap = null;
   workspaceRoot = null;
@@ -1541,12 +1601,10 @@ var SymbolExplorerProvider = class {
     if (!this.projectMap) {
       this.loadProjectMap();
       if (!this.projectMap) {
-        return Promise.resolve([
-          new SymbolTreeItem(
-            'No project map found. Run "Build Index" first.',
-            vscode14.TreeItemCollapsibleState.None
-          )
-        ]);
+        const item = new SymbolTreeItem("\u25B6 Build Index to explore symbols", vscode15.TreeItemCollapsibleState.None);
+        item.command = { command: "membrane.build", title: "Build Index" };
+        item.iconPath = new vscode15.ThemeIcon("play");
+        return Promise.resolve([item]);
       }
     }
     if (!element) {
@@ -1559,17 +1617,15 @@ var SymbolExplorerProvider = class {
         return a.file.path.localeCompare(b.file.path);
       });
       if (files.length === 0) {
-        return Promise.resolve([
-          new SymbolTreeItem(
-            'No symbols found. Run "Build Index" to scan code.',
-            vscode14.TreeItemCollapsibleState.None
-          )
-        ]);
+        const item = new SymbolTreeItem("\u25B6 Build Index to scan symbols", vscode15.TreeItemCollapsibleState.None);
+        item.command = { command: "membrane.build", title: "Build Index" };
+        item.iconPath = new vscode15.ThemeIcon("play");
+        return Promise.resolve([item]);
       }
       const items = files.map(
         ({ file, count }) => new SymbolTreeItem(
           file.path,
-          vscode14.TreeItemCollapsibleState.Collapsed,
+          vscode15.TreeItemCollapsibleState.Collapsed,
           void 0,
           file.path,
           true,
@@ -1585,7 +1641,7 @@ var SymbolExplorerProvider = class {
       const items = sorted.map(
         (entity) => new SymbolTreeItem(
           entity.name,
-          vscode14.TreeItemCollapsibleState.None,
+          vscode15.TreeItemCollapsibleState.None,
           entity,
           filePath
         )
@@ -1594,7 +1650,7 @@ var SymbolExplorerProvider = class {
         return Promise.resolve([
           new SymbolTreeItem(
             `(no symbols in ${path7.basename(filePath)})`,
-            vscode14.TreeItemCollapsibleState.None
+            vscode15.TreeItemCollapsibleState.None
           )
         ]);
       }
@@ -1609,8 +1665,8 @@ var SymbolExplorerProvider = class {
 };
 
 // src/providers/contextDebtProvider.ts
-var vscode15 = __toESM(require("vscode"));
-var DebtTreeItem = class extends vscode15.TreeItem {
+var vscode16 = __toESM(require("vscode"));
+var DebtTreeItem = class extends vscode16.TreeItem {
   constructor(label, collapsibleState, score, tier) {
     super(label, collapsibleState);
     this.score = score;
@@ -1618,11 +1674,11 @@ var DebtTreeItem = class extends vscode15.TreeItem {
     if (tier) {
       this.tooltip = `Score: ${score?.toFixed(2) || "N/A"} (${tier})`;
       if (tier === "CRITICAL") {
-        this.iconPath = new vscode15.ThemeIcon("error", new vscode15.Color([255, 0, 0]));
+        this.iconPath = new vscode16.ThemeIcon("error", new vscode16.Color([255, 0, 0]));
       } else if (tier === "HIGH") {
-        this.iconPath = new vscode15.ThemeIcon("warning", new vscode15.Color([255, 165, 0]));
+        this.iconPath = new vscode16.ThemeIcon("warning", new vscode16.Color([255, 165, 0]));
       } else {
-        this.iconPath = new vscode15.ThemeIcon("check");
+        this.iconPath = new vscode16.ThemeIcon("check");
       }
     }
   }
@@ -1631,7 +1687,7 @@ var ContextDebtProvider = class {
   constructor(runner) {
     this.runner = runner;
   }
-  _onDidChangeTreeData = new vscode15.EventEmitter();
+  _onDidChangeTreeData = new vscode16.EventEmitter();
   onDidChangeTreeData = this._onDidChangeTreeData.event;
   data = [];
   getTreeItem(element) {
@@ -1640,15 +1696,16 @@ var ContextDebtProvider = class {
   getChildren(element) {
     if (!element) {
       if (this.data.length === 0) {
-        return Promise.resolve([
-          new DebtTreeItem('Run "Build Index" to analyze context debt', vscode15.TreeItemCollapsibleState.None)
-        ]);
+        const item = new DebtTreeItem("\u25B6 Build Index to analyze context debt", vscode16.TreeItemCollapsibleState.None);
+        item.command = { command: "membrane.build", title: "Build Index" };
+        item.iconPath = new vscode16.ThemeIcon("play");
+        return Promise.resolve([item]);
       }
       return Promise.resolve(
         this.data.map(
           (item) => new DebtTreeItem(
             item.module || "Unknown",
-            vscode15.TreeItemCollapsibleState.None,
+            vscode16.TreeItemCollapsibleState.None,
             item.score,
             item.tier
           )
@@ -1679,12 +1736,12 @@ var ContextDebtProvider = class {
 };
 
 // src/providers/skillGatesProvider.ts
-var vscode16 = __toESM(require("vscode"));
+var vscode17 = __toESM(require("vscode"));
 var SkillGatesProvider = class {
   constructor(runner) {
     this.runner = runner;
   }
-  _onDidChangeTreeData = new vscode16.EventEmitter();
+  _onDidChangeTreeData = new vscode17.EventEmitter();
   onDidChangeTreeData = this._onDidChangeTreeData.event;
   data = [];
   getTreeItem(element) {
@@ -1693,18 +1750,20 @@ var SkillGatesProvider = class {
   getChildren(element) {
     if (!element) {
       if (this.data.length === 0) {
-        return Promise.resolve([
-          new vscode16.TreeItem("No skill gate results yet")
-        ]);
+        const item = new vscode17.TreeItem("\u25B6 Build Index to run skill gates", vscode17.TreeItemCollapsibleState.None);
+        item.command = { command: "membrane.build", title: "Build Index" };
+        item.iconPath = new vscode17.ThemeIcon("play");
+        return Promise.resolve([item]);
       }
       return Promise.resolve(
         this.data.map((item) => {
-          const item_obj = new vscode16.TreeItem(
-            `${item.action_id || "Unknown"} - ${item.passed ? "\u2713 Passed" : "\u2717 Failed"}`,
-            vscode16.TreeItemCollapsibleState.Collapsed
-          );
-          item_obj.tooltip = `Agent: ${item.agent_id || "Unknown"}`;
-          return item_obj;
+          const passed = item.passed ?? item.status === "pass";
+          const label = `${item.action_id || item.skill || "Unknown"} \u2014 ${passed ? "\u2713 Passed" : "\u2717 Failed"}`;
+          const treeItem = new vscode17.TreeItem(label, vscode17.TreeItemCollapsibleState.None);
+          treeItem.tooltip = `Agent: ${item.agent_id || "Unknown"}
+Blast radius: ${item.blast_radius ?? "N/A"}`;
+          treeItem.iconPath = new vscode17.ThemeIcon(passed ? "pass" : "error");
+          return treeItem;
         })
       );
     }
@@ -1732,12 +1791,12 @@ var SkillGatesProvider = class {
 };
 
 // src/providers/agentLocksProvider.ts
-var vscode17 = __toESM(require("vscode"));
+var vscode18 = __toESM(require("vscode"));
 var AgentLocksProvider = class {
   constructor(runner) {
     this.runner = runner;
   }
-  _onDidChangeTreeData = new vscode17.EventEmitter();
+  _onDidChangeTreeData = new vscode18.EventEmitter();
   onDidChangeTreeData = this._onDidChangeTreeData.event;
   data = [];
   getTreeItem(element) {
@@ -1746,19 +1805,20 @@ var AgentLocksProvider = class {
   getChildren(element) {
     if (!element) {
       if (this.data.length === 0) {
-        return Promise.resolve([
-          new vscode17.TreeItem("No active agent locks")
-        ]);
+        const item = new vscode18.TreeItem("No active agent locks", vscode18.TreeItemCollapsibleState.None);
+        item.iconPath = new vscode18.ThemeIcon("unlock");
+        return Promise.resolve([item]);
       }
       return Promise.resolve(
         this.data.map((item) => {
-          const item_obj = new vscode17.TreeItem(
-            `${item.agent_id || "Unknown"} - ${item.files?.length || 0} files`,
-            vscode17.TreeItemCollapsibleState.None
-          );
-          item_obj.tooltip = `Acquired: ${item.acquired_at || "Unknown"}`;
-          item_obj.iconPath = new vscode17.ThemeIcon("lock");
-          return item_obj;
+          const fileCount = item.files?.length ?? 1;
+          const label = `${item.agent_id || "Unknown agent"} \u2014 ${fileCount} file${fileCount > 1 ? "s" : ""}`;
+          const treeItem = new vscode18.TreeItem(label, vscode18.TreeItemCollapsibleState.None);
+          treeItem.tooltip = `Acquired: ${item.acquired_at || "Unknown"}
+TTL: ${item.ttl_seconds ? `${item.ttl_seconds}s` : "N/A"}`;
+          treeItem.iconPath = new vscode18.ThemeIcon("lock");
+          treeItem.description = item.acquired_at ? `${item.acquired_at}` : void 0;
+          return treeItem;
         })
       );
     }
@@ -1786,12 +1846,12 @@ var AgentLocksProvider = class {
 };
 
 // src/providers/failurePatternsProvider.ts
-var vscode18 = __toESM(require("vscode"));
+var vscode19 = __toESM(require("vscode"));
 var FailurePatternsProvider = class {
   constructor(runner) {
     this.runner = runner;
   }
-  _onDidChangeTreeData = new vscode18.EventEmitter();
+  _onDidChangeTreeData = new vscode19.EventEmitter();
   onDidChangeTreeData = this._onDidChangeTreeData.event;
   data = [];
   getTreeItem(element) {
@@ -1800,20 +1860,24 @@ var FailurePatternsProvider = class {
   getChildren(element) {
     if (!element) {
       if (this.data.length === 0) {
-        return Promise.resolve([
-          new vscode18.TreeItem("No failure patterns detected")
-        ]);
+        const item = new vscode19.TreeItem("No failure patterns detected", vscode19.TreeItemCollapsibleState.None);
+        item.iconPath = new vscode19.ThemeIcon("check");
+        return Promise.resolve([item]);
       }
       return Promise.resolve(
         this.data.map((item) => {
-          const item_obj = new vscode18.TreeItem(
-            `${item.category || "Unknown"} (${item.count || 0}x)`,
-            vscode18.TreeItemCollapsibleState.None
-          );
-          item_obj.tooltip = `Pattern: ${item.pattern_id || "Unknown"}
-Glob: ${item.glob || "N/A"}`;
-          item_obj.iconPath = new vscode18.ThemeIcon("alert");
-          return item_obj;
+          const freq = item.count ?? item.frequency ?? 0;
+          const severity = freq > 5 ? "High" : freq > 1 ? "Medium" : "Low";
+          const icon = freq > 5 ? "error" : freq > 1 ? "warning" : "info";
+          const label = `${item.category || item.pattern || "Unknown"} (${freq}x \xB7 ${severity})`;
+          const treeItem = new vscode19.TreeItem(label, vscode19.TreeItemCollapsibleState.None);
+          treeItem.tooltip = [
+            `Pattern: ${item.pattern_id || item.pattern || "Unknown"}`,
+            `Glob: ${item.glob || "N/A"}`,
+            `Last seen: ${item.last_seen || "N/A"}`
+          ].join("\n");
+          treeItem.iconPath = new vscode19.ThemeIcon(icon);
+          return treeItem;
         })
       );
     }
@@ -1840,152 +1904,712 @@ Glob: ${item.glob || "N/A"}`;
   }
 };
 
+// src/providers/trustScoresProvider.ts
+var vscode20 = __toESM(require("vscode"));
+var TIER_ICONS = {
+  1: "verified",
+  2: "pass",
+  3: "circle-outline",
+  4: "warning",
+  5: "error"
+};
+var TIER_LABELS = {
+  1: "T1:GroundTruth",
+  2: "T2:High",
+  3: "T3:Medium",
+  4: "T4:Low",
+  5: "T5:Unverified"
+};
+var TrustScoresProvider = class {
+  constructor(runner) {
+    this.runner = runner;
+  }
+  _onDidChangeTreeData = new vscode20.EventEmitter();
+  onDidChangeTreeData = this._onDidChangeTreeData.event;
+  data = [];
+  getTreeItem(element) {
+    return element;
+  }
+  getChildren(element) {
+    if (!element) {
+      if (this.data.length === 0) {
+        const empty = new vscode20.TreeItem("No trust data \u2014 run Build Index first");
+        empty.iconPath = new vscode20.ThemeIcon("info");
+        return Promise.resolve([empty]);
+      }
+      return Promise.resolve(
+        this.data.slice(0, 50).map((entry) => {
+          const label = `${entry.label}  ${entry.file}`;
+          const item = new vscode20.TreeItem(label, vscode20.TreeItemCollapsibleState.None);
+          const iconName = TIER_ICONS[entry.tier] ?? "circle-outline";
+          item.iconPath = new vscode20.ThemeIcon(iconName);
+          item.tooltip = new vscode20.MarkdownString(
+            `**${entry.file}**
+
+Tier: ${TIER_LABELS[entry.tier] ?? entry.tier}  
+Score: ${entry.score.toFixed(3)}  
+Type: ${entry.source_type}  
+
+_${entry.rationale}_`
+          );
+          item.description = `${entry.score.toFixed(3)}`;
+          return item;
+        })
+      );
+    }
+    return Promise.resolve([]);
+  }
+  setData(data) {
+    this.data = data;
+    this._onDidChangeTreeData.fire();
+  }
+  async refresh() {
+    if (!this.runner) {
+      this._onDidChangeTreeData.fire();
+      return;
+    }
+    try {
+      const result = await this.runner.runJson(["trust", "--json"]);
+      if (Array.isArray(result)) {
+        this.data = result;
+      }
+    } catch (error) {
+      log(`Failed to load trust scores: ${error}`);
+    }
+    this._onDidChangeTreeData.fire();
+  }
+};
+
+// src/providers/playbookProvider.ts
+var vscode21 = __toESM(require("vscode"));
+var PlaybookProvider = class {
+  constructor(runner) {
+    this.runner = runner;
+  }
+  _onDidChangeTreeData = new vscode21.EventEmitter();
+  onDidChangeTreeData = this._onDidChangeTreeData.event;
+  data = [];
+  getTreeItem(element) {
+    return element;
+  }
+  getChildren(element) {
+    if (!element) {
+      if (this.data.length === 0) {
+        const empty = new vscode21.TreeItem("No proposals yet \u2014 accumulate skill gate runs");
+        empty.iconPath = new vscode21.ThemeIcon("lightbulb");
+        return Promise.resolve([empty]);
+      }
+      return Promise.resolve(
+        this.data.map((proposal) => {
+          const confidencePct = Math.round(proposal.confidence * 100);
+          const item = new vscode21.TreeItem(
+            `${proposal.policy_name}  (${confidencePct}% confidence)`,
+            vscode21.TreeItemCollapsibleState.None
+          );
+          item.iconPath = new vscode21.ThemeIcon("lightbulb");
+          item.tooltip = new vscode21.MarkdownString(
+            `**${proposal.policy_name}**
+
+${proposal.description}
+
+**Pattern:** \`${proposal.file_pattern}\`  
+**Skills:** ${proposal.skills_to_add.join(", ")}  
+
+_${proposal.evidence}_
+
+\`\`\`yaml
+${proposal.yaml_block}
+\`\`\``
+          );
+          item.description = proposal.file_pattern;
+          return item;
+        })
+      );
+    }
+    return Promise.resolve([]);
+  }
+  setData(data) {
+    this.data = data;
+    this._onDidChangeTreeData.fire();
+  }
+  async refresh() {
+    if (!this.runner) {
+      this._onDidChangeTreeData.fire();
+      return;
+    }
+    try {
+      const result = await this.runner.runJson(["playbook", "--json"]);
+      if (Array.isArray(result)) {
+        this.data = result;
+      }
+    } catch (error) {
+      log(`Failed to load playbook proposals: ${error}`);
+    }
+    this._onDidChangeTreeData.fire();
+  }
+};
+
+// src/diagnostics/skillGateDiagnostics.ts
+var vscode22 = __toESM(require("vscode"));
+var SkillGateDiagnosticProvider = class {
+  constructor(runner) {
+    this.runner = runner;
+    this.collection = vscode22.languages.createDiagnosticCollection("membrane-skill-gates");
+  }
+  collection;
+  running = false;
+  async runForFiles(uris) {
+    if (this.running || uris.length === 0)
+      return;
+    this.running = true;
+    try {
+      const filePaths = uris.map((u) => u.fsPath).join(",");
+      const violations = await this.runner.runJson(
+        ["skills", "run", "--files", filePaths, "--json"]
+      );
+      this.applyViolations(violations ?? []);
+    } catch (err) {
+      log(`Skill gate diagnostics error: ${err}`);
+    } finally {
+      this.running = false;
+    }
+  }
+  async runForChangedFiles() {
+    const changed = await this.getGitChangedFiles();
+    if (changed.length > 0)
+      await this.runForFiles(changed);
+  }
+  applyViolations(violations) {
+    this.collection.clear();
+    const byFile = /* @__PURE__ */ new Map();
+    for (const v of violations) {
+      const uri = vscode22.Uri.file(v.file);
+      const startLine = Math.max(0, (v.line ?? 1) - 1);
+      const range = new vscode22.Range(startLine, v.col ?? 0, startLine, v.col_end ?? 999);
+      const msg = v.blast_radius != null ? `[Membrane/${v.skill}] ${v.message} (blast radius: ${v.blast_radius})` : `[Membrane/${v.skill}] ${v.message}`;
+      const diag = new vscode22.Diagnostic(
+        range,
+        msg,
+        v.severity === "error" ? vscode22.DiagnosticSeverity.Error : vscode22.DiagnosticSeverity.Warning
+      );
+      diag.source = `membrane`;
+      diag.code = v.skill;
+      const key = uri.toString();
+      if (!byFile.has(key))
+        byFile.set(key, []);
+      byFile.get(key).push(diag);
+    }
+    byFile.forEach((diags, key) => this.collection.set(vscode22.Uri.parse(key), diags));
+  }
+  hookFileSave(context) {
+    context.subscriptions.push(
+      vscode22.workspace.onDidSaveTextDocument((doc) => {
+        if (doc.uri.scheme === "file") {
+          this.runForFiles([doc.uri]);
+        }
+      })
+    );
+    context.subscriptions.push(
+      vscode22.commands.registerCommand("membrane.runSkillGatesAll", async () => {
+        await vscode22.window.withProgress(
+          { location: vscode22.ProgressLocation.Notification, title: "Membrane: Running skill gates..." },
+          async () => this.runForChangedFiles()
+        );
+        vscode22.commands.executeCommand("workbench.action.problems.focus");
+      })
+    );
+  }
+  async getGitChangedFiles() {
+    const { exec: exec2 } = require("child_process");
+    const workspaceRoot = vscode22.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot)
+      return [];
+    return new Promise((resolve) => {
+      exec2("git diff --name-only HEAD", { cwd: workspaceRoot }, (err, stdout) => {
+        if (err) {
+          resolve([]);
+          return;
+        }
+        const files = stdout.trim().split("\n").filter(Boolean);
+        resolve(files.map((f) => vscode22.Uri.file(`${workspaceRoot}/${f}`)));
+      });
+    });
+  }
+  dispose() {
+    this.collection.dispose();
+  }
+};
+
+// src/panels/WizardPanel.ts
+var vscode23 = __toESM(require("vscode"));
+var fs8 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
+var WizardPanel = class _WizardPanel {
+  constructor(panel, context, runner) {
+    this.context = context;
+    this.runner = runner;
+    this.panel = panel;
+    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+    this.panel.webview.onDidReceiveMessage(
+      (msg) => this.handleMessage(msg),
+      null,
+      this.disposables
+    );
+  }
+  static currentPanel;
+  panel;
+  disposables = [];
+  static show(context, runner) {
+    if (_WizardPanel.currentPanel) {
+      _WizardPanel.currentPanel.panel.reveal(vscode23.ViewColumn.One);
+      return;
+    }
+    const panel = vscode23.window.createWebviewPanel(
+      "membrane.wizard",
+      "Membrane: Setup Wizard",
+      vscode23.ViewColumn.One,
+      {
+        enableScripts: true,
+        localResourceRoots: [vscode23.Uri.joinPath(context.extensionUri, "out")],
+        retainContextWhenHidden: true
+      }
+    );
+    const instance = new _WizardPanel(panel, context, runner);
+    instance.panel.webview.html = instance.buildHtml();
+    _WizardPanel.currentPanel = instance;
+  }
+  buildHtml() {
+    const htmlPath = path8.join(
+      this.context.extensionPath,
+      "webview-src",
+      "wizard",
+      "index.html"
+    );
+    const scriptUri = this.panel.webview.asWebviewUri(
+      vscode23.Uri.joinPath(this.context.extensionUri, "out", "webview-wizard.js")
+    );
+    let html = fs8.readFileSync(htmlPath, "utf-8");
+    html = html.replace(/<script src="\.\.\/wizard\.js"><\/script>/, `<script src="${scriptUri}"></script>`);
+    return html;
+  }
+  send(msg) {
+    this.panel.webview.postMessage(msg);
+  }
+  log(text) {
+    log(`[Wizard] ${text}`);
+    this.send({ type: "wizardProgress", message: text });
+  }
+  async handleMessage(msg) {
+    switch (msg.type) {
+      case "wizardStep": {
+        const step = msg.step ?? 0;
+        if (step === 1)
+          await this.runStep1CheckUv();
+        if (step === 2)
+          await this.runStep2Install();
+        if (step === 3)
+          await this.runStep3Init();
+        if (step === 4)
+          await this.runStep4Build();
+        if (step === 5)
+          await this.runStep5Mcp();
+        break;
+      }
+      case "wizardSkip":
+        this.context.globalState.update("membrane.initialized", true);
+        this.dispose();
+        break;
+      case "wizardFinish":
+        this.context.globalState.update("membrane.initialized", true);
+        vscode23.window.showInformationMessage("Membrane: Setup complete! Your codebase is indexed and ready.");
+        this.dispose();
+        break;
+    }
+  }
+  async runStep1CheckUv() {
+    this.log("Checking uv executable...");
+    const uvPath = detectUvPath(this.context.extensionPath);
+    if (uvPath) {
+      this.log(`\u2713 uv found at: ${uvPath}`);
+    } else {
+      this.log("\u2717 uv not found. Install from https://docs.astral.sh/uv/installation/");
+    }
+  }
+  async runStep2Install() {
+    if (isContextpackInstalled()) {
+      this.log("\u2713 contextpack already installed");
+      return;
+    }
+    this.log("Installing contextpack...");
+    const uvPath = detectUvPath(this.context.extensionPath);
+    if (!uvPath) {
+      this.log("\u2717 uv not found \u2014 cannot install");
+      return;
+    }
+    const workspaceRoot = vscode23.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
+    const ok = await installContextpack(uvPath, this.context.extensionPath, workspaceRoot, {
+      report: ({ message }) => {
+        if (message)
+          this.log(message);
+      }
+    });
+    this.log(ok ? "\u2713 contextpack installed" : "\u2717 Installation failed \u2014 check Membrane output channel");
+  }
+  async runStep3Init() {
+    this.log("Initializing workspace...");
+    try {
+      const res = await this.runner.run(["init"]);
+      this.log(res.exitCode === 0 ? "\u2713 Workspace initialized" : `\u2717 Init failed: ${res.stderr}`);
+    } catch (err) {
+      this.log(`\u2717 Init error: ${err.message}`);
+    }
+  }
+  async runStep4Build() {
+    this.log("Building index (this may take a minute)...");
+    try {
+      const res = await this.runner.run(["build"], { timeout: 3e5 });
+      this.log(res.exitCode === 0 ? "\u2713 Index built successfully" : `\u2717 Build failed: ${res.stderr}`);
+    } catch (err) {
+      this.log(`\u2717 Build error: ${err.message}`);
+    }
+  }
+  async runStep5Mcp() {
+    this.log("Configuring MCP server...");
+    try {
+      const res = await this.runner.run(["harness", "install"]);
+      this.log(res.exitCode === 0 ? "\u2713 MCP server configured" : `\u2717 MCP config failed: ${res.stderr}`);
+    } catch (err) {
+      this.log(`\u2717 MCP error: ${err.message}`);
+    }
+  }
+  dispose() {
+    _WizardPanel.currentPanel = void 0;
+    this.panel.dispose();
+    this.disposables.forEach((d) => d.dispose());
+    this.disposables = [];
+  }
+};
+
+// src/panels/GraphPanel.ts
+var vscode24 = __toESM(require("vscode"));
+var fs9 = __toESM(require("fs"));
+var path9 = __toESM(require("path"));
+var GraphPanel = class {
+  static async show(context, runner) {
+    const panel = vscode24.window.createWebviewPanel(
+      "membrane.graph",
+      "Membrane: Dependency Graph",
+      vscode24.ViewColumn.One,
+      {
+        enableScripts: true,
+        // Allow loading from vis.js CDN (graphify uses it)
+        enableExternalUris: true,
+        retainContextWhenHidden: true
+      }
+    );
+    panel.webview.html = getLoadingHtml();
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) {
+      panel.webview.html = getErrorHtml("No workspace folder open");
+      return;
+    }
+    const outputPath = path9.join(workspaceRoot, ".membrane", "graph.html");
+    try {
+      const membraneDir = path9.join(workspaceRoot, ".membrane");
+      if (!fs9.existsSync(membraneDir)) {
+        fs9.mkdirSync(membraneDir, { recursive: true });
+      }
+      log(`Generating dependency graph to ${outputPath}...`);
+      const result = await vscode24.window.withProgress(
+        {
+          location: vscode24.ProgressLocation.Notification,
+          title: "Membrane: Generating dependency graph...",
+          cancellable: false
+        },
+        async () => runner.run(["graphify", "--output", outputPath], { timeout: 3e5 })
+      );
+      if (result.exitCode !== 0) {
+        log(`graphify failed: ${result.stderr}`);
+        panel.webview.html = await getBuiltinGraphHtml(context, panel.webview, runner);
+        return;
+      }
+      if (!fs9.existsSync(outputPath)) {
+        panel.webview.html = getErrorHtml("graphify ran but did not produce output");
+        return;
+      }
+      log(`Graph generated. Loading...`);
+      const graphHtml = fs9.readFileSync(outputPath, "utf-8");
+      panel.webview.html = graphHtml;
+    } catch (err) {
+      log(`GraphPanel error: ${err.message}`);
+      panel.webview.html = await getBuiltinGraphHtml(context, panel.webview, runner);
+    }
+  }
+};
+async function getBuiltinGraphHtml(context, webview, runner) {
+  const scriptUri = webview.asWebviewUri(
+    vscode24.Uri.joinPath(context.extensionUri, "out", "webview-graph.js")
+  );
+  let graphData = { nodes: [], edges: [] };
+  try {
+    const neighbours = await runner.runJson(["graph", "neighbours", "--json"]);
+    if (neighbours)
+      graphData = neighbours;
+  } catch {
+  }
+  const htmlPath = path9.join(context.extensionPath, "webview-src", "graph", "index.html");
+  if (!fs9.existsSync(htmlPath)) {
+    return getErrorHtml("Graph view HTML not found");
+  }
+  let html = fs9.readFileSync(htmlPath, "utf-8");
+  html = html.replace(/<script src="\.\.\/graph\.js"><\/script>/, `<script src="${scriptUri}"></script>`);
+  html = html.replace("</body>", `<script>window.__GRAPH_DATA__ = ${JSON.stringify(graphData)};</script></body>`);
+  return html;
+}
+function getLoadingHtml() {
+  return `<!DOCTYPE html><html><body style="background:#1e1e1e;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+    <div style="text-align:center">
+      <div style="font-size:24px;margin-bottom:12px">\u26A1</div>
+      <div>Generating dependency graph...</div>
+    </div>
+  </body></html>`;
+}
+function getErrorHtml(message) {
+  return `<!DOCTYPE html><html><body style="background:#1e1e1e;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+    <div style="text-align:center">
+      <div style="font-size:24px;margin-bottom:12px;color:#f44">\u2717</div>
+      <div>${message}</div>
+      <div style="margin-top:12px;font-size:12px;color:#888">Run "Build Index" first, then try again</div>
+    </div>
+  </body></html>`;
+}
+
 // src/extension.ts
 var buildService = null;
 var fileWatcher = null;
 var mcpManager = null;
+var statusBar = null;
 var symbolExplorer = null;
 var contextDebt = null;
 var skillGates = null;
 var agentLocks = null;
 var failurePatterns = null;
+var trustScores = null;
+var playbook = null;
+var diagnostics = null;
 async function activate(context) {
   log(`${BRAND.name} activated`);
+  statusBar = new StatusBarManager();
+  context.subscriptions.push(statusBar);
   const workspaceRoot = getWorkspaceRoot();
   if (!workspaceRoot) {
+    statusBar.setState("disabled", "no workspace folder");
     log("No workspace folder open");
     return;
   }
+  context.subscriptions.push(
+    vscode25.commands.registerCommand("membrane.showStatus", async () => {
+      const pick = await vscode25.window.showQuickPick(
+        [
+          { label: "$(refresh) Retry Setup", detail: "Re-run the full activation sequence" },
+          { label: "$(output) View Logs", detail: "Open the Membrane output channel" },
+          { label: "$(gear) Open Settings", detail: "Open Membrane extension settings" },
+          { label: "$(play) Run Build Index", detail: "Index codebase symbols and graph" }
+        ],
+        { placeHolder: `Membrane \u2014 ${statusBar?.state ?? "unknown"}` }
+      );
+      if (!pick)
+        return;
+      if (pick.label.includes("Retry"))
+        vscode25.commands.executeCommand("workbench.action.reloadWindow");
+      if (pick.label.includes("Logs"))
+        vscode25.commands.executeCommand("workbench.action.output.toggleOutput");
+      if (pick.label.includes("Settings"))
+        vscode25.commands.executeCommand("workbench.action.openSettings", "membrane");
+      if (pick.label.includes("Build"))
+        vscode25.commands.executeCommand(COMMANDS.build);
+    })
+  );
+  let runner;
   try {
+    statusBar.setState("initializing", "checking uv");
     log("Detecting uv executable...");
     const uvPath = detectUvPath(context.extensionPath);
     if (!uvPath) {
-      vscode19.window.showErrorMessage(
-        `${BRAND.name}: Could not find uv executable. Please install uv from https://docs.astral.sh/uv/installation/`
-      );
+      statusBar.setState("error", "uv not found \u2014 install from astral.sh/uv");
+      vscode25.window.showErrorMessage(
+        `${BRAND.name}: Could not find uv executable.`,
+        "Install uv"
+      ).then((action) => {
+        if (action === "Install uv") {
+          vscode25.env.openExternal(vscode25.Uri.parse("https://docs.astral.sh/uv/installation/"));
+        }
+      });
       return;
     }
     log(`Found uv at: ${uvPath}`);
     if (!isContextpackInstalled()) {
+      statusBar.setState("initializing", "installing contextpack");
       log("contextpack not installed, installing...");
-      const result = await vscode19.window.withProgress(
+      const installed = await vscode25.window.withProgress(
         {
-          location: vscode19.ProgressLocation.Notification,
+          location: vscode25.ProgressLocation.Notification,
           title: `${BRAND.name}: Installing contextpack`,
           cancellable: false
         },
-        async (progress) => {
-          return await installContextpack(uvPath, context.extensionPath, progress);
-        }
+        async (progress) => installContextpack(uvPath, context.extensionPath, workspaceRoot, progress)
       );
-      if (!result) {
-        vscode19.window.showErrorMessage(`${BRAND.name}: Failed to install contextpack`);
+      if (!installed) {
+        statusBar.setState("error", "contextpack install failed");
         return;
       }
-      log("Installation complete, continuing...");
+      log("Installation complete.");
     }
-    log("Verifying contextpack installation...");
+    statusBar.setState("initializing", "verifying installation");
     const verification = await verifyContextpack(uvPath);
     if (!verification.ok) {
-      log(`Verification warning: ${verification.error}, but venv exists - continuing...`);
+      log(`Verification warning: ${verification.error} \u2014 continuing anyway`);
     } else {
       log(`contextpack verified: ${verification.version}`);
     }
     const envVars = await buildEnvVars(context.secrets);
-    const runner = createRunner(uvPath, workspaceRoot, envVars);
+    runner = createRunner(uvPath, workspaceRoot, envVars);
     buildService = new BuildService(workspaceRoot, runner);
     fileWatcher = new FileWatcherManager(workspaceRoot, buildService);
     fileWatcher.start();
-    mcpManager = new McpServerManager(workspaceRoot, runner, uvPath);
-    await mcpManager.start();
-    symbolExplorer = new SymbolExplorerProvider();
-    contextDebt = new ContextDebtProvider(runner);
-    skillGates = new SkillGatesProvider(runner);
-    agentLocks = new AgentLocksProvider(runner);
-    failurePatterns = new FailurePatternsProvider(runner);
-    vscode19.window.registerTreeDataProvider("membrane.symbolExplorer", symbolExplorer);
-    vscode19.window.registerTreeDataProvider("membrane.contextDebt", contextDebt);
-    vscode19.window.registerTreeDataProvider("membrane.skillGates", skillGates);
-    vscode19.window.registerTreeDataProvider("membrane.agentLocks", agentLocks);
-    vscode19.window.registerTreeDataProvider("membrane.failurePatterns", failurePatterns);
-    registerBuildCommands(context, buildService, fileWatcher, {
-      symbolExplorer,
-      contextDebt,
-      skillGates,
-      agentLocks,
-      failurePatterns
-    });
-    registerHarvestCommands(context, runner);
-    registerSkillCommands(context, runner, {
-      skillGates,
-      failurePatterns,
-      contextDebt,
-      agentLocks
-    });
-    registerGovernanceCommands(context, runner);
-    registerSetupCommands(context, runner);
-    context.subscriptions.push(
-      vscode19.commands.registerCommand(
-        "membrane.refreshSymbolExplorer",
-        () => symbolExplorer?.refresh()
-      ),
-      vscode19.commands.registerCommand(
-        "membrane.refreshContextDebt",
-        () => contextDebt?.refresh()
-      ),
-      vscode19.commands.registerCommand(
-        "membrane.refreshSkillGates",
-        () => skillGates?.refresh()
-      ),
-      vscode19.commands.registerCommand(
-        "membrane.refreshAgentLocks",
-        () => agentLocks?.refresh()
-      ),
-      vscode19.commands.registerCommand(
-        "membrane.refreshFailurePatterns",
-        () => failurePatterns?.refresh()
-      )
-    );
-    await Promise.all([
-      symbolExplorer?.refresh(),
-      contextDebt?.refresh(),
-      skillGates?.refresh(),
-      agentLocks?.refresh(),
-      failurePatterns?.refresh()
-    ]);
-    if (!isContextpackInitialized()) {
-      vscode19.window.showInformationMessage(
-        `${BRAND.name}: Welcome! Your workspace is ready. Run "${BRAND.name}: Build Index" to get started.`
-      );
+    statusBar.setState("initializing", "starting MCP server");
+    try {
+      mcpManager = new McpServerManager(workspaceRoot, runner, uvPath);
+      await mcpManager.start();
+    } catch (mcpErr) {
+      log(`MCP server failed to start: ${mcpErr.message} \u2014 continuing without MCP`);
     }
-    log(`${BRAND.name} initialization complete`);
-  } catch (error) {
-    log(`Activation error: ${error.message}`);
-    vscode19.window.showErrorMessage(`${BRAND.name}: Initialization failed - ${error.message}`);
+  } catch (err) {
+    statusBar.setState("error", err.message?.slice(0, 40));
+    log(`Activation error: ${err.message}`);
+    vscode25.window.showErrorMessage(
+      `${BRAND.name}: Initialization failed \u2014 ${err.message}`,
+      "View Logs"
+    ).then((action) => {
+      if (action === "View Logs")
+        vscode25.commands.executeCommand("workbench.action.output.toggleOutput");
+    });
+    return;
   }
-}
-async function deactivate() {
-  log(`${BRAND.name} deactivating`);
-  if (fileWatcher) {
-    fileWatcher.dispose();
-  }
-  if (mcpManager) {
-    await mcpManager.stop();
-    mcpManager.dispose();
-  }
-  if (buildService) {
-    buildService.dispose();
-  }
-  dispose();
-}
-function getProviders() {
-  return {
+  symbolExplorer = new SymbolExplorerProvider();
+  contextDebt = new ContextDebtProvider(runner);
+  skillGates = new SkillGatesProvider(runner);
+  agentLocks = new AgentLocksProvider(runner);
+  failurePatterns = new FailurePatternsProvider(runner);
+  trustScores = new TrustScoresProvider(runner);
+  playbook = new PlaybookProvider(runner);
+  vscode25.window.registerTreeDataProvider("membrane.symbolExplorer", symbolExplorer);
+  vscode25.window.registerTreeDataProvider("membrane.contextDebt", contextDebt);
+  vscode25.window.registerTreeDataProvider("membrane.skillGates", skillGates);
+  vscode25.window.registerTreeDataProvider("membrane.agentLocks", agentLocks);
+  vscode25.window.registerTreeDataProvider("membrane.failurePatterns", failurePatterns);
+  vscode25.window.registerTreeDataProvider("membrane.trustScores", trustScores);
+  vscode25.window.registerTreeDataProvider("membrane.playbook", playbook);
+  registerBuildCommands(context, buildService, fileWatcher, {
     symbolExplorer,
     contextDebt,
     skillGates,
     agentLocks,
-    failurePatterns
-  };
+    failurePatterns,
+    trustScores,
+    playbook
+  });
+  registerHarvestCommands(context, runner, context.extensionUri);
+  registerSkillCommands(context, runner, { skillGates, failurePatterns, contextDebt, agentLocks });
+  registerGovernanceCommands(context, runner);
+  registerSetupCommands(context, runner);
+  context.subscriptions.push(
+    vscode25.commands.registerCommand("membrane.refreshSymbolExplorer", () => symbolExplorer?.refresh()),
+    vscode25.commands.registerCommand("membrane.refreshContextDebt", () => contextDebt?.refresh()),
+    vscode25.commands.registerCommand("membrane.refreshSkillGates", () => skillGates?.refresh()),
+    vscode25.commands.registerCommand("membrane.refreshAgentLocks", () => agentLocks?.refresh()),
+    vscode25.commands.registerCommand("membrane.refreshFailurePatterns", () => failurePatterns?.refresh()),
+    vscode25.commands.registerCommand("membrane.refreshTrustScores", () => trustScores?.refresh()),
+    vscode25.commands.registerCommand("membrane.refreshPlaybook", () => playbook?.refresh())
+  );
+  context.subscriptions.push(
+    vscode25.commands.registerCommand(
+      COMMANDS.graphView,
+      () => GraphPanel.show(context, runner)
+    ),
+    vscode25.commands.registerCommand(
+      "membrane.harvestPanel",
+      () => HarvestPanel.show(context, runner)
+    )
+  );
+  diagnostics = new SkillGateDiagnosticProvider(runner);
+  diagnostics.hookFileSave(context);
+  context.subscriptions.push(diagnostics);
+  statusBar.startConflictPolling(async () => {
+    try {
+      const locks = await runner.runJson(["locks", "--json"]);
+      return Array.isArray(locks) ? locks.length : 0;
+    } catch {
+      return 0;
+    }
+  });
+  context.subscriptions.push(
+    vscode25.window.onDidChangeActiveTextEditor(async (editor) => {
+      if (!editor || editor.document.uri.scheme !== "file")
+        return;
+      const filePath = editor.document.uri.fsPath;
+      try {
+        const patterns = await runner.runJson(["patterns", "--file", filePath, "--json"]);
+        if (Array.isArray(patterns) && patterns.length > 0) {
+          const action = await vscode25.window.showWarningMessage(
+            `${BRAND.name}: ${patterns.length} known failure pattern(s) in this file`,
+            "Review Patterns",
+            "Dismiss"
+          );
+          if (action === "Review Patterns") {
+            vscode25.commands.executeCommand(COMMANDS.patternsShow);
+          }
+        }
+      } catch {
+      }
+    })
+  );
+  await Promise.allSettled([
+    symbolExplorer.refresh(),
+    contextDebt.refresh(),
+    skillGates.refresh(),
+    agentLocks.refresh(),
+    failurePatterns.refresh(),
+    trustScores.refresh(),
+    playbook.refresh()
+  ]);
+  statusBar.setState("ready");
+  const initialized = context.globalState.get("membrane.initialized");
+  if (!initialized && !isContextpackInitialized()) {
+    WizardPanel.show(context, runner);
+  } else if (!isContextpackInitialized()) {
+    vscode25.window.showInformationMessage(
+      `${BRAND.name}: Ready. Run "Build Index" (${COMMANDS.build}) to index your codebase.`,
+      "Build Now"
+    ).then((action) => {
+      if (action === "Build Now")
+        vscode25.commands.executeCommand(COMMANDS.build);
+    });
+  }
+  log(`${BRAND.name} initialization complete`);
+}
+async function deactivate() {
+  log(`${BRAND.name} deactivating`);
+  fileWatcher?.dispose();
+  if (mcpManager) {
+    await mcpManager.stop();
+    mcpManager.dispose();
+  }
+  buildService?.dispose();
+  dispose();
+}
+function getProviders() {
+  return { symbolExplorer, contextDebt, skillGates, agentLocks, failurePatterns, trustScores, playbook };
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
