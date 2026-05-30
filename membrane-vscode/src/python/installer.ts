@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
-import { execSync, spawn } from 'child_process';
+import { execSync } from 'child_process';
 import { getVenvPath } from './detector';
 import { log } from '../utils/output';
 
@@ -13,10 +12,12 @@ import { log } from '../utils/output';
 export async function installContextpack(
   uvPath: string,
   extensionPath: string,
+  workspaceRoot: string,
   progress?: vscode.Progress<{ message?: string; increment?: number }>,
 ): Promise<boolean> {
   const venv = getVenvPath();
   const pythonPath = getPythonPath(venv);
+  const localSourcePath = getLocalSourcePath(workspaceRoot);
 
   // Find bundled wheel (optional)
   const wheelsDir = path.join(extensionPath, 'resources', 'wheels');
@@ -31,26 +32,33 @@ export async function installContextpack(
   }
 
   try {
-    progress?.report({ message: 'Creating venv...' });
-    log(`Creating venv at ${venv}`);
+    if (!fs.existsSync(pythonPath)) {
+      progress?.report({ message: 'Creating venv...' });
+      log(`Creating venv at ${venv}`);
 
-    // Create venv
-    execSync(`"${uvPath}" venv "${venv}"`, { stdio: 'pipe', encoding: 'utf-8' });
-    log('venv created successfully');
+      // Create venv on first install.
+      execSync(`"${uvPath}" venv "${venv}"`, { stdio: 'pipe', encoding: 'utf-8' });
+      log('venv created successfully');
+    } else {
+      log(`Reusing existing venv at ${venv}`);
+    }
 
     progress?.report({ message: 'Installing contextpack...', increment: 50 });
 
     let installCmd = '';
-    if (actualWheelPath) {
+    if (localSourcePath) {
+      log(`Installing contextpack from local workspace source: ${localSourcePath}`);
+      installCmd = `"${uvPath}" pip install --python "${pythonPath}" "${localSourcePath}[harness]" -v`;
+    } else if (actualWheelPath) {
       log(`Installing contextpack from bundled wheel: ${actualWheelPath}`);
-      installCmd = `"${pythonPath}" -m pip install "${actualWheelPath}[harness]" -v`;
+      installCmd = `"${uvPath}" pip install --python "${pythonPath}" "${actualWheelPath}[harness]" -v`;
     } else {
       log('No bundled wheel found, installing from PyPI...');
-      installCmd = `"${pythonPath}" -m pip install contextpack[harness] -v`;
+      installCmd = `"${uvPath}" pip install --python "${pythonPath}" "contextpack[harness]" -v`;
     }
 
     const output = execSync(installCmd, { encoding: 'utf-8', stdio: 'pipe' });
-    log(`pip output: ${output}`);
+    log(`install output: ${output}`);
 
     // Verify installation
     progress?.report({ message: 'Verifying installation...', increment: 25 });
@@ -69,10 +77,30 @@ export async function installContextpack(
     const errorMsg = error.stdout || error.stderr || error.message || String(error);
     log(`❌ Installation failed: ${errorMsg}`);
     vscode.window.showErrorMessage(
-      `Membrane installation failed.\n\nError: ${errorMsg}\n\nTry manually installing:\n${pythonPath} -m pip install contextpack[harness]`,
+      `Membrane installation failed.\n\nError: ${errorMsg}\n\nTry manually installing:\n${uvPath} pip install --python ${pythonPath} contextpack[harness]`,
     );
     return false;
   }
+}
+
+function getLocalSourcePath(workspaceRoot: string): string | null {
+  const pyprojectPath = path.join(workspaceRoot, 'pyproject.toml');
+  const packageInitPath = path.join(workspaceRoot, 'contextpack', '__init__.py');
+
+  if (!fs.existsSync(pyprojectPath) || !fs.existsSync(packageInitPath)) {
+    return null;
+  }
+
+  try {
+    const pyproject = fs.readFileSync(pyprojectPath, 'utf-8');
+    if (pyproject.includes('name = "contextpack"')) {
+      return workspaceRoot;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 /**
@@ -92,7 +120,20 @@ function getPythonPath(venvPath: string): string {
 export function isContextpackInstalled(): boolean {
   const venv = getVenvPath();
   const pythonPath = getPythonPath(venv);
-  return fs.existsSync(pythonPath);
+  if (!fs.existsSync(pythonPath)) {
+    return false;
+  }
+
+  try {
+    execSync(`"${pythonPath}" -c "import contextpack"`, {
+      stdio: 'pipe',
+      encoding: 'utf-8',
+      timeout: 5000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

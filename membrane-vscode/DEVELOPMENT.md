@@ -177,9 +177,12 @@ The extension shells out to the Python `context` CLI via `ContextRunner.run()`.
 | `context build .` | Full build (scan → graph → embed → store) |
 | `context harvest "<query>"` | Harvest context |
 | `context ask "<question>"` | Ask LLM |
-| `context debt` | Show context debt (--json flag needed) |
-| `context locks` | Show agent locks (--json flag needed) |
-| `context patterns` | Show failure patterns (--json flag needed) |
+| `context debt --json` | Show context debt |
+| `context locks --json` | Show agent locks |
+| `context patterns --json` | Show failure patterns |
+| `context coupling --json` | Show architectural coupling trend |
+| `context trust --json` | Show per-file trust scores (T1–T5) |
+| `context playbook --json` | Show auto-learned skill gate proposals |
 | `context-harness-mcp` | Start MCP server |
 | `context harness install` | Install harness (hooks, .mcp.json, etc.) |
 
@@ -292,9 +295,12 @@ Check:
 
 ## Roadmap
 
-### Phase 2 (Planned)
+### Phase 2 (In Progress)
 - [ ] Webview panels styled + functional (graph, harvest, wizard)
-- [ ] --json flags on all CLI commands
+- [x] --json flags on all CLI commands (debt, locks, patterns, coupling, trust, playbook)
+- [x] Trust Scores sidebar panel (TrustScoresProvider + `context trust --json`)
+- [x] Playbook Proposals sidebar panel (PlaybookProvider + `context playbook --json`)
+- [x] Coupling Trend command renders structured JSON output
 - [ ] CodeLens on hub entities
 - [ ] Inline diagnostics (debt, patterns)
 

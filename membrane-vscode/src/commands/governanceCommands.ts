@@ -88,12 +88,81 @@ export function registerGovernanceCommands(
       log('Command: coupling trend');
       showOutput();
 
-      const result = await runner.run(['coupling', 'trend']);
+      const result = await runner.runJson(['coupling', '--json']);
+      if (!result || typeof result !== 'object') {
+        log('Coupling trend: no data yet — run builds to accumulate metrics.');
+        return;
+      }
+
+      const r = result as {
+        coupling_change_pct: number;
+        hub_change: number;
+        cycle_change: number;
+        is_decaying: boolean;
+        alert_message: string;
+        hotspot_modules: string[];
+        snapshot_count: number;
+        latest?: {
+          edge_count: number;
+          node_count: number;
+          hub_count: number;
+          cycle_count: number;
+          avg_coupling: number;
+        };
+      };
+
+      const lines: string[] = ['## Coupling Trend'];
+      if (r.latest) {
+        lines.push(
+          `Latest graph: ${r.latest.edge_count} edges / ${r.latest.node_count} nodes | ` +
+            `${r.latest.hub_count} hubs | ${r.latest.cycle_count} cycles`,
+          `Avg coupling: ${r.latest.avg_coupling.toFixed(4)}`,
+        );
+      }
+      lines.push(
+        `30d change: ${r.coupling_change_pct >= 0 ? '+' : ''}${r.coupling_change_pct}%`,
+        `Hub change: ${r.hub_change >= 0 ? '+' : ''}${r.hub_change}`,
+        `Cycle change: ${r.cycle_change >= 0 ? '+' : ''}${r.cycle_change}`,
+        `Snapshots recorded: ${r.snapshot_count}`,
+      );
+      if (r.is_decaying) {
+        lines.push('', `🚨 DECAY ALERT: ${r.alert_message}`);
+      }
+      if (r.hotspot_modules.length > 0) {
+        lines.push('', `Hotspot modules: ${r.hotspot_modules.slice(0, 5).join(', ')}`);
+      }
+      log(lines.join('\n'));
+    }),
+  );
+
+  // membrane.trustShow
+  context.subscriptions.push(
+    vscode.commands.registerCommand(COMMANDS.trustShow, async () => {
+      log('Command: show trust scores');
+      showOutput();
+
+      const result = await runner.run(['trust']);
 
       if (result.exitCode === 0) {
         log(result.stdout);
       } else {
-        log(`Coupling trend failed: ${result.stderr}`);
+        log(`Trust scores failed: ${result.stderr}`);
+      }
+    }),
+  );
+
+  // membrane.playbookShow
+  context.subscriptions.push(
+    vscode.commands.registerCommand(COMMANDS.playbookShow, async () => {
+      log('Command: show playbook proposals');
+      showOutput();
+
+      const result = await runner.run(['playbook']);
+
+      if (result.exitCode === 0) {
+        log(result.stdout);
+      } else {
+        log(`Playbook proposals failed: ${result.stderr}`);
       }
     }),
   );

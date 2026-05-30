@@ -19,6 +19,8 @@ import { ContextDebtProvider } from './providers/contextDebtProvider';
 import { SkillGatesProvider } from './providers/skillGatesProvider';
 import { AgentLocksProvider } from './providers/agentLocksProvider';
 import { FailurePatternsProvider } from './providers/failurePatternsProvider';
+import { TrustScoresProvider } from './providers/trustScoresProvider';
+import { PlaybookProvider } from './providers/playbookProvider';
 
 let buildService: BuildService | null = null;
 let fileWatcher: FileWatcherManager | null = null;
@@ -28,6 +30,8 @@ let contextDebt: ContextDebtProvider | null = null;
 let skillGates: SkillGatesProvider | null = null;
 let agentLocks: AgentLocksProvider | null = null;
 let failurePatterns: FailurePatternsProvider | null = null;
+let trustScores: TrustScoresProvider | null = null;
+let playbook: PlaybookProvider | null = null;
 
 export async function activate(context: vscode.ExtensionContext) {
   log(`${BRAND.name} activated`);
@@ -63,7 +67,7 @@ export async function activate(context: vscode.ExtensionContext) {
           cancellable: false,
         },
         async (progress) => {
-          return await installContextpack(uvPath, context.extensionPath, progress);
+          return await installContextpack(uvPath, context.extensionPath, workspaceRoot, progress);
         },
       );
 
@@ -109,12 +113,16 @@ export async function activate(context: vscode.ExtensionContext) {
     skillGates = new SkillGatesProvider(runner);
     agentLocks = new AgentLocksProvider(runner);
     failurePatterns = new FailurePatternsProvider(runner);
+    trustScores = new TrustScoresProvider(runner);
+    playbook = new PlaybookProvider(runner);
 
     vscode.window.registerTreeDataProvider('membrane.symbolExplorer', symbolExplorer);
     vscode.window.registerTreeDataProvider('membrane.contextDebt', contextDebt);
     vscode.window.registerTreeDataProvider('membrane.skillGates', skillGates);
     vscode.window.registerTreeDataProvider('membrane.agentLocks', agentLocks);
     vscode.window.registerTreeDataProvider('membrane.failurePatterns', failurePatterns);
+    vscode.window.registerTreeDataProvider('membrane.trustScores', trustScores);
+    vscode.window.registerTreeDataProvider('membrane.playbook', playbook);
 
     // Phase 10: Register commands
     registerBuildCommands(context, buildService, fileWatcher, {
@@ -123,6 +131,8 @@ export async function activate(context: vscode.ExtensionContext) {
       skillGates,
       agentLocks,
       failurePatterns,
+      trustScores,
+      playbook,
     });
     registerHarvestCommands(context, runner);
     registerSkillCommands(context, runner, {
@@ -151,6 +161,12 @@ export async function activate(context: vscode.ExtensionContext) {
       vscode.commands.registerCommand('membrane.refreshFailurePatterns', () =>
         failurePatterns?.refresh(),
       ),
+      vscode.commands.registerCommand('membrane.refreshTrustScores', () =>
+        trustScores?.refresh(),
+      ),
+      vscode.commands.registerCommand('membrane.refreshPlaybook', () =>
+        playbook?.refresh(),
+      ),
     );
 
     // Initial population of providers if a build already exists
@@ -160,6 +176,8 @@ export async function activate(context: vscode.ExtensionContext) {
       skillGates?.refresh(),
       agentLocks?.refresh(),
       failurePatterns?.refresh(),
+      trustScores?.refresh(),
+      playbook?.refresh(),
     ]);
 
     // Phase 11: Show welcome message if first time
@@ -202,5 +220,7 @@ export function getProviders() {
     skillGates,
     agentLocks,
     failurePatterns,
+    trustScores,
+    playbook,
   };
 }

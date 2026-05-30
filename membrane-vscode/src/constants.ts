@@ -71,6 +71,10 @@ export const COMMANDS = {
   refreshSkillGates: 'membrane.refreshSkillGates',
   refreshAgentLocks: 'membrane.refreshAgentLocks',
   refreshFailurePatterns: 'membrane.refreshFailurePatterns',
+  trustShow: 'membrane.trustShow',
+  playbookShow: 'membrane.playbookShow',
+  refreshTrustScores: 'membrane.refreshTrustScores',
+  refreshPlaybook: 'membrane.refreshPlaybook',
 };
 
 // View IDs
@@ -80,6 +84,8 @@ export const VIEWS = {
   skillGates: 'membrane.skillGates',
   agentLocks: 'membrane.agentLocks',
   failurePatterns: 'membrane.failurePatterns',
+  trustScores: 'membrane.trustScores',
+  playbook: 'membrane.playbook',
 };
 
 // Output channel name

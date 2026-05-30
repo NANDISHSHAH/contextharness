@@ -10,6 +10,8 @@ interface TreeProviders {
   skillGates?: any;
   agentLocks?: any;
   failurePatterns?: any;
+  trustScores?: any;
+  playbook?: any;
 }
 
 export function registerBuildCommands(
@@ -25,6 +27,8 @@ export function registerBuildCommands(
       if (providers?.skillGates) await providers.skillGates.refresh?.();
       if (providers?.agentLocks) await providers.agentLocks.refresh?.();
       if (providers?.failurePatterns) await providers.failurePatterns.refresh?.();
+      if (providers?.trustScores) await providers.trustScores.refresh?.();
+      if (providers?.playbook) await providers.playbook.refresh?.();
     } catch (error) {
       log(`Error refreshing providers: ${error}`);
     }

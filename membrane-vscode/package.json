@@ -85,6 +85,14 @@
         {
           "id": "membrane.failurePatterns",
           "name": "Failure Patterns"
+        },
+        {
+          "id": "membrane.trustScores",
+          "name": "Trust Scores"
+        },
+        {
+          "id": "membrane.playbook",
+          "name": "Playbook Proposals"
         }
       ]
     },
@@ -208,6 +216,26 @@
         "command": "membrane.refreshFailurePatterns",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "membrane.trustShow",
+        "title": "Show Trust Scores",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.playbookShow",
+        "title": "Show Playbook Proposals",
+        "category": "Membrane"
+      },
+      {
+        "command": "membrane.refreshTrustScores",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "membrane.refreshPlaybook",
+        "title": "Refresh",
+        "icon": "$(refresh)"
       }
     ],
     "configuration": {
@@ -316,6 +344,16 @@
         {
           "command": "membrane.refreshFailurePatterns",
           "when": "view == membrane.failurePatterns",
+          "group": "navigation"
+        },
+        {
+          "command": "membrane.refreshTrustScores",
+          "when": "view == membrane.trustScores",
+          "group": "navigation"
+        },
+        {
+          "command": "membrane.refreshPlaybook",
+          "when": "view == membrane.playbook",
           "group": "navigation"
         }
       ],

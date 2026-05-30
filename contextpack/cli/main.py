@@ -724,15 +724,203 @@ def patterns_cmd(
 def coupling_cmd(
     path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
     days: int = typer.Option(30, "--days", "-d", help="Trend window in days"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
 ) -> None:
     """Show architectural coupling trend over time (Phase 9)."""
+    import json
+
     from contextpack.adaptive.coupling import CouplingMonitor
 
     path = path or Path.cwd()
     db = path / ".contextpack" / "memory.db"
     monitor = CouplingMonitor(db)
     trend = _run(monitor.trend(days=days))
-    console.print(trend.to_text())
+
+    if json_output:
+        latest = trend.snapshots[-1] if trend.snapshots else None
+        output = {
+            "coupling_change_pct": trend.coupling_change_pct,
+            "hub_change": trend.hub_change,
+            "cycle_change": trend.cycle_change,
+            "is_decaying": trend.is_decaying,
+            "alert_message": trend.alert_message,
+            "hotspot_modules": trend.hotspot_modules,
+            "snapshot_count": len(trend.snapshots),
+            "latest": {
+                "edge_count": latest.edge_count,
+                "node_count": latest.node_count,
+                "hub_count": latest.hub_count,
+                "cycle_count": latest.cycle_count,
+                "avg_coupling": latest.avg_coupling,
+            } if latest else None,
+        }
+        print(json.dumps(output))
+    else:
+        console.print(trend.to_text())
+
+
+# ── Trust Scoring ─────────────────────────────────────────────────────────────
+
+@app.command("trust")
+def trust_cmd(
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
+) -> None:
+    """Show trust scores for project files based on source type and freshness."""
+    import json as json_mod
+    import subprocess
+    import time
+
+    from contextpack.governance.trust import TrustScorer
+
+    path = path or Path.cwd()
+    pm_path = path / ".contextpack" / "project_map.json"
+    if not pm_path.exists():
+        if json_output:
+            print(json_mod.dumps([]))
+        else:
+            console.print("[dim]Run 'context build' first to compute trust scores[/dim]")
+        return
+
+    with pm_path.open() as f:
+        pm = json_mod.load(f)
+
+    scorer = TrustScorer()
+    results = []
+
+    for file_info in pm.get("files", []):
+        file_path = file_info.get("path", "")
+        language = file_info.get("language", "")
+        if not file_path:
+            continue
+
+        fp_lower = file_path.lower()
+        if (
+            "test_" in fp_lower
+            or "_test" in fp_lower
+            or ".spec." in fp_lower
+            or ".test." in fp_lower
+        ):
+            source_type = "test"
+        elif language in ("markdown", "rst") or fp_lower.endswith((".md", ".rst")):
+            source_type = "docs"
+        else:
+            source_type = "code"
+
+        days_old: float = 0.0
+        try:
+            git_result = subprocess.run(
+                ["git", "log", "-1", "--format=%ct", "--", file_path],
+                cwd=str(path),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if git_result.returncode == 0 and git_result.stdout.strip():
+                ts_val = int(git_result.stdout.strip())
+                days_old = (time.time() - ts_val) / 86400
+        except Exception:
+            pass
+
+        ts = scorer.score_chunk(
+            source_type=source_type,
+            file_path=file_path,
+            days_since_modified=days_old,
+        )
+        results.append(
+            {
+                "file": file_path,
+                "tier": ts.tier,
+                "score": ts.score,
+                "label": ts.label,
+                "source_type": source_type,
+                "rationale": ts.rationale,
+            }
+        )
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    if json_output:
+        print(json_mod.dumps(results))
+    else:
+        from rich.table import Table
+
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("File", max_width=55)
+        table.add_column("Tier", width=5, justify="right")
+        table.add_column("Score", width=6, justify="right")
+        table.add_column("Label", width=16)
+        for r in results[:40]:
+            color = (
+                "green"
+                if r["tier"] <= 2
+                else "yellow"
+                if r["tier"] == 3
+                else "red"
+            )
+            table.add_row(
+                r["file"],
+                str(r["tier"]),
+                f"{r['score']:.3f}",
+                f"[{color}]{r['label']}[/{color}]",
+            )
+        console.print("\n[bold]Trust Scores[/bold]\n")
+        console.print(table)
+
+
+# ── Playbook Learning ─────────────────────────────────────────────────────────
+
+@app.command("playbook")
+def playbook_cmd(
+    path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),  # noqa: B008
+) -> None:
+    """Show auto-learned playbook proposals from observed skill gate runs (Phase 9)."""
+    import json as json_mod
+
+    from contextpack.adaptive.playbook import PlaybookLearner
+    from contextpack.skills.evidence import EvidenceStore
+
+    path = path or Path.cwd()
+    db = path / ".contextpack" / "memory.db"
+    if not db.exists():
+        if json_output:
+            print(json_mod.dumps([]))
+        else:
+            console.print("[dim]No evidence bundles yet — run skill gates first[/dim]")
+        return
+
+    store = EvidenceStore(db)
+    bundles = _run(store.list_recent(limit=100))
+
+    records = [
+        {
+            "files_modified": b.files_modified,
+            "skill_results": b.skill_results,
+            "passed": b.passed,
+        }
+        for b in bundles
+    ]
+
+    learner = PlaybookLearner()
+    proposals = learner.propose(records)
+
+    if json_output:
+        output = [
+            {
+                "policy_name": p.policy_name,
+                "description": p.description,
+                "file_pattern": p.file_pattern,
+                "skills_to_add": p.skills_to_add,
+                "confidence": p.confidence,
+                "evidence": p.evidence,
+                "yaml_block": p.to_yaml_block(),
+            }
+            for p in proposals
+        ]
+        print(json_mod.dumps(output))
+    else:
+        console.print(learner.format_proposals(proposals))
 
 
 @app.command("snapshots")
