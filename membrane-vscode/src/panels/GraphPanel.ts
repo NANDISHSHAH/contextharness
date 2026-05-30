@@ -97,25 +97,19 @@ export class GraphPanel {
 
   private async loadGraphData(): Promise<void> {
     try {
-      log('GraphPanel: loading graph data...');
+      log('GraphPanel: loading graph data via graphify --stdout...');
 
-      // Try outline first (always available after build)
-      const outline = await this.runner.runJson<any>(['outline', '--json']);
-      if (outline) {
-        const { nodes, edges } = buildGraphFromOutline(outline);
-        this.send({ type: 'graphData', nodes, edges });
+      const data = await this.runner.runJson<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
+        ['graphify', '--stdout'],
+        { timeout: 30_000 },
+      );
+
+      if (data && Array.isArray(data.nodes) && data.nodes.length > 0) {
+        this.send({ type: 'graphData', nodes: data.nodes, edges: data.edges ?? [] });
         return;
       }
 
-      // Fallback: neighbours
-      const neighbours = await this.runner.runJson<any>(['graph', 'neighbours', '--json']);
-      if (neighbours) {
-        const { nodes, edges } = buildGraphFromNeighbours(neighbours);
-        this.send({ type: 'graphData', nodes, edges });
-        return;
-      }
-
-      // No data — show empty state
+      // Empty — show empty state (index not built)
       this.send({ type: 'graphData', nodes: [], edges: [] });
     } catch (err: any) {
       log(`GraphPanel data error: ${err.message}`);
@@ -165,94 +159,6 @@ export class GraphPanel {
   }
 }
 
-// ── data transformers ──
-
-function buildGraphFromOutline(outline: any): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  const nodes: GraphNode[] = [];
-  const edges: GraphEdge[] = [];
-  const connectionCount: Record<string, number> = {};
-
-  const entities: any[] = outline.entities ?? outline.symbols ?? [];
-  const files: any[] = outline.files ?? [];
-
-  // Count connections per entity from imports/deps
-  for (const e of entities) {
-    const deps: string[] = e.deps ?? e.imports ?? [];
-    for (const dep of deps) {
-      connectionCount[e.id ?? e.name] = (connectionCount[e.id ?? e.name] ?? 0) + 1;
-      connectionCount[dep] = (connectionCount[dep] ?? 0) + 1;
-      edges.push({ from: e.id ?? e.name, to: dep });
-    }
-  }
-
-  // File nodes
-  for (const f of files) {
-    const id = f.path ?? f.id;
-    const conns = connectionCount[id] ?? 0;
-    nodes.push({
-      id,
-      label: path.basename(id),
-      isHub: conns >= 5,
-      type: 'file',
-      filePath: id,
-      connections: conns,
-    });
-  }
-
-  // Entity nodes
-  for (const e of entities) {
-    const id = e.id ?? e.name;
-    if (nodes.find(n => n.id === id)) continue;
-    const conns = connectionCount[id] ?? 0;
-    nodes.push({
-      id,
-      label: e.name ?? id,
-      isHub: conns >= 5,
-      type: e.type ?? e.kind ?? 'function',
-      filePath: e.file_path ?? e.file ?? undefined,
-      connections: conns,
-    });
-  }
-
-  return { nodes, edges };
-}
-
-function buildGraphFromNeighbours(data: any): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  if (Array.isArray(data)) {
-    // Array of {node, neighbours} objects
-    const nodes: GraphNode[] = [];
-    const edges: GraphEdge[] = [];
-    const seen = new Set<string>();
-
-    for (const entry of data) {
-      const id = entry.node ?? entry.id;
-      if (!seen.has(id)) {
-        seen.add(id);
-        const conns = (entry.neighbours ?? []).length;
-        nodes.push({ id, label: path.basename(id), isHub: conns >= 5, type: 'module', filePath: id, connections: conns });
-      }
-      for (const n of entry.neighbours ?? []) {
-        if (!seen.has(n)) {
-          seen.add(n);
-          nodes.push({ id: n, label: path.basename(n), isHub: false, type: 'module', filePath: n, connections: 1 });
-        }
-        edges.push({ from: id, to: n });
-      }
-    }
-    return { nodes, edges };
-  }
-
-  // Object with nodes/edges arrays
-  return {
-    nodes: (data.nodes ?? []).map((n: any) => ({
-      id: n.id, label: n.label ?? n.id,
-      isHub: n.isHub ?? false, type: n.type, filePath: n.filePath, connections: n.connections ?? 0,
-    })),
-    edges: (data.edges ?? []).map((e: any, i: number) => ({
-      id: String(i), from: e.source ?? e.from, to: e.target ?? e.to,
-    })),
-  };
-}
 
 function getNonce(): string {
   let text = '';

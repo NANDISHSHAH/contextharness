@@ -230,6 +230,7 @@ def graphify(
     path: Path | None = typer.Argument(None, help="Repository path"),  # noqa: B008
     output: str = typer.Option(".membrane/graph.html", "--output", "-o", help="Output HTML path"),  # noqa: B008
     json_output: bool = typer.Option(False, "--json", help="Also write graph.json"),  # noqa: B008
+    stdout: bool = typer.Option(False, "--stdout", help="Print graph JSON to stdout and exit (for programmatic use)"),  # noqa: B008
 ) -> None:
     """Generate an interactive vis.js dependency graph HTML file."""
     import json as _json
@@ -239,72 +240,75 @@ def graphify(
     project = Project(path)
 
     if not project.context_dir.exists():
+        if stdout:
+            print(_json.dumps({"nodes": [], "edges": []}))
+            return
         console.print("[red]✗[/red] No index found. Run [bold]context build[/bold] first.")
         raise typer.Exit(1)
 
     out_path = _Path(output) if not _Path(output).is_absolute() else _Path(output)
     if not out_path.is_absolute():
         out_path = path / out_path
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if not stdout:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Build graph data from project
+    # Build graph data from project_map (the built index)
     try:
-        summary = project.graph_summary() if hasattr(project, "graph_summary") else {}
-        entities = getattr(project, "entities", []) or []
-        files = getattr(project, "files", []) or []
+        pm = project._load_project_map()
+        entities = pm.entities or []
+        files = pm.files or []
 
-        # Try richer graph data from index
-        graph_data = {"nodes": [], "edges": []}
-        try:
-            from contextpack.core.project import Project as _P
-            p = _P(path)
-            if hasattr(p, "get_graph_data"):
-                graph_data = p.get_graph_data()
-        except Exception:
-            pass
+        graph_data: dict = {"nodes": [], "edges": []}
+        seen_ids: set = set()
+        conn_count: dict = {}
 
-        # Fall back to building from outline
-        if not graph_data["nodes"]:
-            seen_ids: set = set()
-            conn_count: dict = {}
+        for e in entities:
+            eid = str(getattr(e, "name", ""))
+            if not eid:
+                continue
+            deps = list(getattr(e, "dependencies", []) or getattr(e, "imports", []) or [])
+            for dep in deps:
+                dep_str = str(dep)
+                conn_count[eid] = conn_count.get(eid, 0) + 1
+                conn_count[dep_str] = conn_count.get(dep_str, 0) + 1
+                graph_data["edges"].append({"from": eid, "to": dep_str})
 
-            for e in entities:
-                eid = str(getattr(e, "id", None) or getattr(e, "name", ""))
-                deps = list(getattr(e, "deps", []) or getattr(e, "imports", []) or [])
-                for dep in deps:
-                    conn_count[eid] = conn_count.get(eid, 0) + 1
-                    conn_count[dep] = conn_count.get(dep, 0) + 1
-                    graph_data["edges"].append({"from": eid, "to": dep})
+        for f in files:
+            fid = str(f) if isinstance(f, str) else str(getattr(f, "path", f))
+            if fid and fid not in seen_ids:
+                seen_ids.add(fid)
+                c = conn_count.get(fid, 0)
+                graph_data["nodes"].append({
+                    "id": fid, "label": _Path(fid).name,
+                    "isHub": c >= 5, "type": "file", "filePath": fid, "connections": c,
+                })
 
-            for f in files:
-                fid = str(getattr(f, "path", f) if not isinstance(f, str) else f)
-                if fid not in seen_ids:
-                    seen_ids.add(fid)
-                    c = conn_count.get(fid, 0)
-                    graph_data["nodes"].append({
-                        "id": fid, "label": _Path(fid).name,
-                        "isHub": c >= 5, "type": "file", "filePath": fid, "connections": c,
-                    })
-
-            for e in entities:
-                eid = str(getattr(e, "id", None) or getattr(e, "name", ""))
-                if eid and eid not in seen_ids:
-                    seen_ids.add(eid)
-                    c = conn_count.get(eid, 0)
-                    graph_data["nodes"].append({
-                        "id": eid,
-                        "label": str(getattr(e, "name", eid)),
-                        "isHub": c >= 5,
-                        "type": str(getattr(e, "type", "function")),
-                        "filePath": str(getattr(e, "file_path", "")),
-                        "connections": c,
-                    })
+        for e in entities:
+            eid = str(getattr(e, "name", ""))
+            if eid and eid not in seen_ids:
+                seen_ids.add(eid)
+                c = conn_count.get(eid, 0)
+                fp = str(getattr(e, "file_path", "") or "")
+                graph_data["nodes"].append({
+                    "id": eid,
+                    "label": eid,
+                    "isHub": c >= 5,
+                    "type": str(getattr(e, "type", "function")),
+                    "filePath": fp,
+                    "connections": c,
+                })
 
     except Exception as exc:
-        console.print(f"[yellow]Warning: could not extract full graph — {exc}[/yellow]")
+        if not stdout:
+            console.print(f"[yellow]Warning: could not extract full graph — {exc}[/yellow]")
         graph_data = {"nodes": [], "edges": []}
 
     graph_json = _json.dumps(graph_data)
+
+    # --stdout: output JSON to stdout for programmatic use (e.g. VS Code extension)
+    if stdout:
+        print(graph_json)
+        return
 
     # Write JSON if requested
     if json_output:
