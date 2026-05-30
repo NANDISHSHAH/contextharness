@@ -53,9 +53,11 @@ export class GraphPanel {
       vscode.ViewColumn.One,
       {
         enableScripts: true,
-        // Allow vis.js from unpkg CDN
-        enableExternalUris: true,
         retainContextWhenHidden: true,
+        localResourceRoots: [
+          vscode.Uri.joinPath(context.extensionUri, 'media'),
+          vscode.Uri.joinPath(context.extensionUri, 'webview-src'),
+        ],
       },
     );
 
@@ -77,10 +79,18 @@ export class GraphPanel {
 
     let html = fs.readFileSync(htmlPath, 'utf-8');
 
-    // Replace nonce placeholder with a real nonce
     const nonce = getNonce();
     html = html.replace(/nonce="NONCE"/g, `nonce="${nonce}"`);
     html = html.replace(/nonce-NONCE/g, `nonce-${nonce}`);
+
+    // Inject local vis.js URI (avoids CDN dependency)
+    const visUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'vis-network.min.js'),
+    );
+    html = html.replace('VIS_JS_URI', visUri.toString());
+
+    // Inject WebView CSP source for local resources
+    html = html.replace('WEBVIEW_CSP_SOURCE', this.panel.webview.cspSource);
 
     return html;
   }

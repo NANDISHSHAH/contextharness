@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-NONCE' https://unpkg.com; style-src 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https://unpkg.com;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-NONCE' WEBVIEW_CSP_SOURCE; style-src 'unsafe-inline';" />
   <title>Membrane — Dependency Graph</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap');
 
     :root {
       --bg:        #0d0d0d;
@@ -539,7 +538,7 @@
 
 </div>
 
-<script nonce="NONCE" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script nonce="NONCE" src="VIS_JS_URI"></script>
 <script nonce="NONCE">
 (function () {
   const vscode = acquireVsCodeApi();

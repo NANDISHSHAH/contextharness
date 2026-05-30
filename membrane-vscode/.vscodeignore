@@ -1,5 +1,5 @@
 src/
-webview-src/
+webview-src/**/*.ts
 node_modules/
 .git
 .gitignore
