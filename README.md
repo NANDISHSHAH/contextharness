@@ -1,7 +1,7 @@
 # ContextPack + Context Harness + Membrane
 
 <p align="center">
-  <img src="membrane-vscode/media/membrane-logo.svg" alt="Membrane" width="120"/>
+  <img src="membrane-vscode/media/membranelogo.png" alt="Membrane" width="120"/>
 </p>
 
 [License: MIT](LICENSE)
