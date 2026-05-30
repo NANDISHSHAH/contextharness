@@ -9,6 +9,8 @@ venv/
 env/
 dist/
 build/
+# Allow membrane-vscode TypeScript source subdirs named 'build'
+!membrane-vscode/src/build/
 *.egg-info/
 .eggs/
 *.egg
